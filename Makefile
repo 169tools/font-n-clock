@@ -3,6 +3,10 @@ PLUGIN_DIR = $(HOME)/Library/Application Support/obs-studio/plugins
 configure:
 	cmake --preset macos
 
+index:
+	cmake --preset index
+	ln -sfn build_index/compile_commands.json compile_commands.json
+
 build:
 	cmake --build --preset macos
 

@@ -1,0 +1,22 @@
+{
+	"version": 8,
+	"cmakeMinimumRequired": {
+		"major": 3,
+		"minor": 28,
+		"patch": 0
+	},
+	"configurePresets": [
+		{
+			"name": "index",
+			"inherits": ["macos"],
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/build_index",
+			"cacheVariables": {
+				"CMAKE_OSX_COMPILE_COMMANDS": true,
+				"CMAKE_OSX_ARCHITECTURES": "arm64",
+				"XCODE": true,
+				"XCODE_VERSION": "26.6"
+			}
+		}
+	]
+}

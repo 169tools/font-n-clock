@@ -13,6 +13,7 @@
 !buildspec.json
 !CMakeLists.txt
 !CMakePresets.json
+!CMakeUserPresets.json
 !LICENSE
 !README.md
 !Makefile
