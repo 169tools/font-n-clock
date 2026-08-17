@@ -17,6 +17,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <plugin-support.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
 
 const char *PLUGIN_NAME = "@CMAKE_PROJECT_NAME@";
 const char *PLUGIN_VERSION = "@CMAKE_PROJECT_VERSION@";

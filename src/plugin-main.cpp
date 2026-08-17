@@ -16,20 +16,24 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#pragma once
+#include <obs-module.h>
+#include <util/base.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "plugin-support.h"
+#include "color-source.hpp"
 
-#include <stdarg.h>
+OBS_DECLARE_MODULE()
+OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
-extern const char *PLUGIN_NAME;
-extern const char *PLUGIN_VERSION;
+bool obs_module_load(void)
+{
+	register_color_source();
 
-void obs_log(int log_level, const char *format, ...);
-extern void blogva(int log_level, const char *format, va_list args);
-
-#ifdef __cplusplus
+	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
+	return true;
 }
-#endif
+
+void obs_module_unload(void)
+{
+	obs_log(LOG_INFO, "plugin unloaded");
+}
