@@ -15,5 +15,5 @@ clean:
 
 link:
 	mkdir -p "$(PLUGIN_DIR)"
-	ln -sfn "$(PWD)/build_macos/rundir/RelWithDebInfo/font-meets-clock.plugin" \
+	ln -sfn "$(PWD)/build_macos/RelWithDebInfo/font-meets-clock.plugin" \
 					"$(PLUGIN_DIR)/font-meets-clock.plugin"
