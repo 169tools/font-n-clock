@@ -35,8 +35,8 @@ if(ENABLE_QT)
 endif()
 
 target_sources(
-	${CMAKE_PROJECT_NAME}
-	PRIVATE src/plugin-main.cpp src/color-source.cpp src/color-source.hpp
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE src/plugin-main.cpp src/color-source.cpp src/color-source.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
