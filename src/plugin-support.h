@@ -22,8 +22,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 extern "C" {
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdarg.h>
 
 extern const char *PLUGIN_NAME;
