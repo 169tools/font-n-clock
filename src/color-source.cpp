@@ -16,7 +16,15 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <obs.h>
+#include <obs-data.h>
 #include <obs-module.h>
+#include <obs-properties.h>
+#include <obs-source.h>
+
+#include <cstdint>
+#include <graphics/graphics.h>
+#include <graphics/vec4.h>
 
 struct color_source {
 	vec4 color;

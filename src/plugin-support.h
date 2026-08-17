@@ -25,7 +25,6 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <string.h>
 
 extern const char *PLUGIN_NAME;
 extern const char *PLUGIN_VERSION;
