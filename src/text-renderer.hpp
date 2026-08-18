@@ -18,4 +18,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-void register_clock_source();
+#include <cstdint>
+#include <vector>
+
+struct rendered_text {
+	std::uint32_t width = 0;
+	std::uint32_t height = 0;
+	std::vector<std::uint8_t> pixels;
+};
+
+rendered_text render_text();

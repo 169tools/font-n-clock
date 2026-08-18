@@ -16,6 +16,14 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#pragma once
+#include "text-renderer.hpp"
+#include <cstddef>
 
-void register_clock_source();
+rendered_text render_text()
+{
+	rendered_text result;
+	result.width = 200;
+	result.height = 100;
+	result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0xFF);
+	return result;
+}
