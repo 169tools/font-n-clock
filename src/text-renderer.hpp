@@ -16,24 +16,15 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include <obs-module.h>
-#include <util/base.h>
+#pragma once
 
-#include "plugin-support.h"
-#include "clock-source.hpp"
+#include <cstdint>
+#include <vector>
 
-OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
+struct rendered_text {
+	std::uint32_t width = 0;
+	std::uint32_t height = 0;
+	std::vector<std::uint8_t> pixels;
+};
 
-bool obs_module_load(void)
-{
-	register_clock_source();
-
-	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
-	return true;
-}
-
-void obs_module_unload(void)
-{
-	obs_log(LOG_INFO, "plugin unloaded");
-}
+rendered_text render_text();

@@ -16,6 +16,10 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#pragma once
+#include "text-renderer.hpp"
+#include <cstddef>
 
-void register_color_source();
+rendered_text render_text()
+{
+	return rendered_text();
+}
