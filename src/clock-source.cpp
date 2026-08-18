@@ -132,7 +132,7 @@ void clock_source_render(void *data, gs_effect *)
 obs_properties_t *clock_source_get_properties(void *)
 {
 	obs_properties_t *props = obs_properties_create();
-	obs_properties_add_color(props, "color", obs_module_text("ColorSource.Color"));
+	obs_properties_add_color(props, "color", obs_module_text("ClockSource.Color"));
 	return props;
 }
 
