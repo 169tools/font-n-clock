@@ -67,14 +67,14 @@ struct row_style {
 	CGColorRef color = nullptr;
 };
 
-CGColorRef make_color(std::uint32_t rgba)
+CGColorRef make_color(std::uint32_t abgr)
 {
 	CGColorSpaceRef space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
 	const CGFloat components[] = {
-		static_cast<CGFloat>(rgba & 0xff) / 255.0,
-		static_cast<CGFloat>((rgba >> 8) & 0xff) / 255.0,
-		static_cast<CGFloat>((rgba >> 16) & 0xff) / 255.0,
-		static_cast<CGFloat>((rgba >> 24) & 0xff) / 255.0,
+		static_cast<CGFloat>(abgr & 0xff) / 255.0,
+		static_cast<CGFloat>((abgr >> 8) & 0xff) / 255.0,
+		static_cast<CGFloat>((abgr >> 16) & 0xff) / 255.0,
+		static_cast<CGFloat>((abgr >> 24) & 0xff) / 255.0,
 	};
 	return CGColorRef(CGColorCreate(space, components));
 }
