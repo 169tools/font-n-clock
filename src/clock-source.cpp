@@ -52,7 +52,7 @@ static void clock_source_rebuild_texture(clock_source *context)
 	if (context->tex) {
 		gs_texture_destroy(context->tex);
 	}
-	context->tex = gs_texture_create(bitmap.width, bitmap.height, GS_BGRA, 1, &rows, GS_DYNAMIC);
+	context->tex = gs_texture_create(bitmap.width, bitmap.height, GS_RGBA, 1, &rows, GS_DYNAMIC);
 	obs_leave_graphics();
 
 	context->tex_width = bitmap.width;
@@ -111,7 +111,7 @@ void clock_source_render(void *data, gs_effect *)
 		return;
 	}
 
-	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);
 	gs_technique_t *tech = gs_effect_get_technique(effect, "Draw");
 
 	const bool previous = gs_framebuffer_srgb_enabled();

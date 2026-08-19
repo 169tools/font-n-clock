@@ -41,6 +41,10 @@ target_sources(
 
 if(APPLE)
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/text-renderer-mac.cpp)
+  target_link_libraries(
+    ${CMAKE_PROJECT_NAME}
+    PRIVATE "-framework CoreFoundation" "-framework CoreGraphics" "-framework CoreText"
+  )
 else()
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/text-renderer-stub.cpp)
 endif()
