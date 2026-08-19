@@ -42,6 +42,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 CFStringRef make_cfstring(const std::string &value)
 {
+	// TODO: Create 後の解放を行う（他の箇所も同じ）
 	return CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8 *>(value.data()),
 				       static_cast<CFIndex>(value.size()), kCFStringEncodingUTF8, false);
 }
