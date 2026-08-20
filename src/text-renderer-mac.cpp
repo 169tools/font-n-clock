@@ -48,10 +48,10 @@ CFPtr<CFStringRef> make_cfstring(const std::string &value)
 							  false));
 }
 
-CFPtr<CTFontRef> make_font()
+CFPtr<CTFontRef> make_font(const std::string &style, const std::string &face)
 {
-	CFPtr<CFStringRef> face = make_cfstring("Tsukushi B Round Gothic");
-	if (!face) {
+	CFPtr<CFStringRef> font_face = make_cfstring(style);
+	if (!font_face) {
 		return {};
 	}
 
@@ -60,13 +60,13 @@ CFPtr<CTFontRef> make_font()
 	if (!attributes) {
 		return {};
 	}
-	CFDictionarySetValue(attributes.get(), kCTFontFamilyNameAttribute, face.get());
+	CFDictionarySetValue(attributes.get(), kCTFontFamilyNameAttribute, font_face.get());
 
-	CFPtr<CFStringRef> style = make_cfstring("Bold");
-	if (!style) {
+	CFPtr<CFStringRef> font_style = make_cfstring(style);
+	if (!font_style) {
 		return {};
 	}
-	CFDictionarySetValue(attributes.get(), kCTFontStyleNameAttribute, style.get());
+	CFDictionarySetValue(attributes.get(), kCTFontStyleNameAttribute, font_style.get());
 
 	CFPtr<CTFontDescriptorRef> descriptor(CTFontDescriptorCreateWithAttributes(attributes.get()));
 	if (!descriptor) {
@@ -130,14 +130,14 @@ ink_extents measure(CTLineRef line)
 	return extents;
 };
 
-rendered_text render_text()
+rendered_text render_text(const clock_style &style)
 {
-	CFPtr<CTFontRef> font = make_font();
+	CFPtr<CTFontRef> font = make_font(style.font_face, style.font_style);
 	if (!font) {
 		return {};
 	}
 
-	CFPtr<CGColorRef> color = make_color(0xffaaa500);
+	CFPtr<CGColorRef> color = make_color(style.color);
 	if (!color) {
 		return {};
 	}
