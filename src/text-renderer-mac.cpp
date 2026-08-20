@@ -36,10 +36,21 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreText/CTLine.h>
 #include <CoreText/CTStringAttributes.h>
 #include <MacTypes.h>
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <limits>
 #include <string>
+
+constexpr double reference_point_size = 100;
+
+struct row_style {
+	CTFontRef font = nullptr;
+	CGColorRef color = nullptr;
+};
 
 CFPtr<CFStringRef> make_cfstring(const std::string &value)
 {
@@ -48,9 +59,9 @@ CFPtr<CFStringRef> make_cfstring(const std::string &value)
 							  false));
 }
 
-CFPtr<CTFontRef> make_font(const std::string &style, const std::string &face)
+CFPtr<CTFontRef> make_font(const std::string &face, const std::string &style, const double point_size)
 {
-	CFPtr<CFStringRef> font_face = make_cfstring(style);
+	CFPtr<CFStringRef> font_face = make_cfstring(face);
 	if (!font_face) {
 		return {};
 	}
@@ -72,14 +83,8 @@ CFPtr<CTFontRef> make_font(const std::string &style, const std::string &face)
 	if (!descriptor) {
 		return {};
 	}
-	double point_size = 96;
 	return CFPtr<CTFontRef>(CTFontCreateWithFontDescriptor(descriptor.get(), point_size, nullptr));
 }
-
-struct row_style {
-	CTFontRef font = nullptr;
-	CGColorRef color = nullptr;
-};
 
 CFPtr<CGColorRef> make_color(std::uint32_t abgr)
 {
@@ -122,17 +127,77 @@ ink_extents measure(CTLineRef line)
 {
 	const CGRect bounds = CTLineGetBoundsWithOptions(line, kCTLineBoundsUseGlyphPathBounds);
 
-	ink_extents extents;
-	extents.width = bounds.size.width;
-	extents.left = bounds.origin.x;
-	extents.ascent = bounds.origin.y + bounds.size.height;
-	extents.descent = -bounds.origin.y;
-	return extents;
-};
+	return {.width = bounds.size.width,
+		.ascent = bounds.origin.y + bounds.size.height,
+		.descent = -bounds.origin.y,
+		.left = bounds.origin.x};
+}
+
+std::array<ink_extents, 10> digit_extents(const row_style &row)
+{
+	std::array<ink_extents, 10> digits;
+	for (int i = 0; i <= 9; ++i) {
+		CFPtr<CTLineRef> line = make_line(std::string(1, static_cast<char>('0' + i)), row);
+		if (!line) {
+			return {};
+		}
+		digits[i] = measure(line.get());
+	}
+	return digits;
+}
+
+ink_span digit_envelope(const std::array<ink_extents, 10> &digits)
+{
+	const double infinity = std::numeric_limits<double>::infinity();
+	ink_span envelope{.ascent = -infinity, .descent = -infinity};
+	for (int i = 0; i <= 9; ++i) {
+		const ink_extents extents = digits[i];
+		envelope.ascent = std::max(envelope.ascent, extents.ascent);
+		envelope.descent = std::max(envelope.descent, extents.descent);
+	}
+	return envelope;
+}
+
+double solve_point_size(const std::array<ink_extents, 10> &digits, const double target_height)
+{
+	const double reference_height = digit_envelope(digits).height();
+	if (reference_height <= 0) {
+		return 0;
+	}
+	return reference_point_size * target_height / reference_height;
+}
+
+double time_reference_width(const row_style &row)
+{
+	double widest = 0;
+	for (int hour = 0; hour < 24; ++hour) {
+		for (int minute = 0; minute < 60; ++minute) {
+			char text[6];
+			std::snprintf(text, sizeof text, "%d:%02d", hour, minute);
+
+			CFPtr<CTLineRef> line = make_line(text, row);
+			if (!line) {
+				return 0;
+			}
+			widest = std::max(widest, measure(line.get()).width);
+		}
+	}
+	return widest;
+}
 
 rendered_text render_text(const clock_style &style)
 {
-	CFPtr<CTFontRef> font = make_font(style.font_face, style.font_style);
+	CFPtr<CTFontRef> probe = make_font(style.font_face, style.font_style, reference_point_size);
+	if (!probe) {
+		return {};
+	}
+
+	const double point_size = solve_point_size(digit_extents({.font = probe.get()}), style.time_ink_height);
+	if (point_size <= 0) {
+		return {};
+	}
+
+	CFPtr<CTFontRef> font = make_font(style.font_face, style.font_style, point_size);
 	if (!font) {
 		return {};
 	}
@@ -142,15 +207,24 @@ rendered_text render_text(const clock_style &style)
 		return {};
 	}
 
+	const row_style row = {.font = font.get(), .color = color.get()};
+	const std::array<ink_extents, 10> digits = digit_extents(row);
+
+	const double reference_width = time_reference_width(row);
+	const ink_span envelope = digit_envelope(digits);
+	if (reference_width <= 0 || envelope.height() <= 0) {
+		return {};
+	}
+
 	CFPtr<CTLineRef> line = make_line("12:34", row_style(font.get(), color.get()));
 	if (!line) {
 		return {};
 	}
 
-	rendered_text result;
-	ink_extents ink = measure(line.get());
-	result.width = static_cast<std::uint32_t>(std::ceil(ink.width));
-	result.height = static_cast<std::uint32_t>(std::ceil(ink.height()));
+	rendered_text result = {
+		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
+		.height = static_cast<std::uint32_t>(std::ceil(envelope.height())),
+	};
 	result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
 
 	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
@@ -172,7 +246,10 @@ rendered_text render_text(const clock_style &style)
 	CGContextSetShouldAntialias(context.get(), true);
 	CGContextSetShouldSmoothFonts(context.get(), false);
 	CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
-	CGContextSetTextPosition(context.get(), -ink.left, ink.descent);
+
+	const ink_extents ink = measure(line.get());
+	CGContextSetTextPosition(context.get(), (reference_width - ink.width) / 2 - ink.left, envelope.descent);
+
 	CTLineDraw(line.get(), context.get());
 
 	return result;
