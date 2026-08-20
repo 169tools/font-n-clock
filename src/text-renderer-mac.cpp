@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include "cf-ptr.hpp"
 #include "layout.hpp"
 #include "text-renderer.hpp"
 #include <CoreFoundation/CFAttributedString.h>
@@ -40,26 +41,39 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <string>
 
-CFStringRef make_cfstring(const std::string &value)
+CFPtr<CFStringRef> make_cfstring(const std::string &value)
 {
-	// TODO: Create 後の解放を行う（他の箇所も同じ）
-	return CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8 *>(value.data()),
-				       static_cast<CFIndex>(value.size()), kCFStringEncodingUTF8, false);
+	return CFPtr<CFStringRef>(CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8 *>(value.data()),
+							  static_cast<CFIndex>(value.size()), kCFStringEncodingUTF8,
+							  false));
 }
 
-CTFontRef make_font()
+CFPtr<CTFontRef> make_font()
 {
-	CFStringRef face = make_cfstring("Tsukushi B Round Gothic");
-	CFMutableDictionaryRef attributes(CFDictionaryCreateMutable(nullptr, 2, &kCFTypeDictionaryKeyCallBacks,
-								    &kCFTypeDictionaryValueCallBacks));
-	CFDictionarySetValue(attributes, kCTFontFamilyNameAttribute, face);
+	CFPtr<CFStringRef> face = make_cfstring("Tsukushi B Round Gothic");
+	if (!face) {
+		return {};
+	}
 
-	CFStringRef style = make_cfstring("Bold");
-	CFDictionarySetValue(attributes, kCTFontStyleNameAttribute, style);
+	CFPtr<CFMutableDictionaryRef> attributes(CFDictionaryCreateMutable(nullptr, 2, &kCFTypeDictionaryKeyCallBacks,
+									   &kCFTypeDictionaryValueCallBacks));
+	if (!attributes) {
+		return {};
+	}
+	CFDictionarySetValue(attributes.get(), kCTFontFamilyNameAttribute, face.get());
 
-	CTFontDescriptorRef descriptor(CTFontDescriptorCreateWithAttributes(attributes));
+	CFPtr<CFStringRef> style = make_cfstring("Bold");
+	if (!style) {
+		return {};
+	}
+	CFDictionarySetValue(attributes.get(), kCTFontStyleNameAttribute, style.get());
+
+	CFPtr<CTFontDescriptorRef> descriptor(CTFontDescriptorCreateWithAttributes(attributes.get()));
+	if (!descriptor) {
+		return {};
+	}
 	double point_size = 96;
-	return CTFontCreateWithFontDescriptor(descriptor, point_size, nullptr);
+	return CFPtr<CTFontRef>(CTFontCreateWithFontDescriptor(descriptor.get(), point_size, nullptr));
 }
 
 struct row_style {
@@ -67,27 +81,41 @@ struct row_style {
 	CGColorRef color = nullptr;
 };
 
-CGColorRef make_color(std::uint32_t abgr)
+CFPtr<CGColorRef> make_color(std::uint32_t abgr)
 {
-	CGColorSpaceRef space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
+	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
+	if (!space) {
+		return {};
+	}
 	const CGFloat components[] = {
 		static_cast<CGFloat>(abgr & 0xff) / 255.0,
 		static_cast<CGFloat>((abgr >> 8) & 0xff) / 255.0,
 		static_cast<CGFloat>((abgr >> 16) & 0xff) / 255.0,
 		static_cast<CGFloat>((abgr >> 24) & 0xff) / 255.0,
 	};
-	return CGColorRef(CGColorCreate(space, components));
+	return CFPtr<CGColorRef>(CGColorCreate(space.get(), components));
 }
 
-CTLineRef make_line(const std::string &text, const row_style &row)
+CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 {
-	CFStringRef string = make_cfstring(text);
+	CFPtr<CFStringRef> string = make_cfstring(text);
+	if (!string) {
+		return {};
+	}
+
 	const void *keys[] = {kCTFontAttributeName, kCTForegroundColorAttributeName};
 	const void *values[] = {row.font, row.color};
-	CFDictionaryRef attributes(CFDictionaryCreate(nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
-						      &kCFTypeDictionaryValueCallBacks));
-	CFAttributedStringRef attributed(CFAttributedStringCreate(nullptr, string, attributes));
-	return CTLineRef(CTLineCreateWithAttributedString(attributed));
+	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
+							     &kCFTypeDictionaryValueCallBacks));
+	if (!attributes) {
+		return {};
+	}
+
+	CFPtr<CFAttributedStringRef> attributed(CFAttributedStringCreate(nullptr, string.get(), attributes.get()));
+	if (!attributed) {
+		return {};
+	}
+	return CFPtr<CTLineRef>(CTLineCreateWithAttributedString(attributed.get()));
 }
 
 ink_extents measure(CTLineRef line)
@@ -104,29 +132,48 @@ ink_extents measure(CTLineRef line)
 
 rendered_text render_text()
 {
-	CTFontRef font = make_font();
-	CGColorRef color = make_color(0xffaaa500);
-	CTLineRef line = make_line("12:34", row_style(font, color));
+	CFPtr<CTFontRef> font = make_font();
+	if (!font) {
+		return {};
+	}
+
+	CFPtr<CGColorRef> color = make_color(0xffaaa500);
+	if (!color) {
+		return {};
+	}
+
+	CFPtr<CTLineRef> line = make_line("12:34", row_style(font.get(), color.get()));
+	if (!line) {
+		return {};
+	}
 
 	rendered_text result;
-	ink_extents ink = measure(line);
+	ink_extents ink = measure(line.get());
 	result.width = static_cast<std::uint32_t>(std::ceil(ink.width));
 	result.height = static_cast<std::uint32_t>(std::ceil(ink.height()));
 	result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
 
-	CGColorSpaceRef space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
+	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
+	if (!space) {
+		return {};
+	}
+
 	const CGBitmapInfo bitmap_info =
 		static_cast<CGBitmapInfo>(static_cast<std::uint32_t>(kCGImageAlphaPremultipliedLast) |
 					  static_cast<std::uint32_t>(kCGBitmapByteOrder32Big));
 
-	CGContextRef context(CGBitmapContextCreate(result.pixels.data(), result.width, result.height, 8,
-						   static_cast<std::size_t>(result.width) * 4, space, bitmap_info));
+	CFPtr<CGContextRef> context(CGBitmapContextCreate(result.pixels.data(), result.width, result.height, 8,
+							  static_cast<std::size_t>(result.width) * 4, space.get(),
+							  bitmap_info));
+	if (!context) {
+		return {};
+	}
 
-	CGContextSetShouldAntialias(context, true);
-	CGContextSetShouldSmoothFonts(context, false);
-	CGContextSetTextMatrix(context, CGAffineTransformIdentity);
-	CGContextSetTextPosition(context, -ink.left, ink.descent);
-	CTLineDraw(line, context);
+	CGContextSetShouldAntialias(context.get(), true);
+	CGContextSetShouldSmoothFonts(context.get(), false);
+	CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
+	CGContextSetTextPosition(context.get(), -ink.left, ink.descent);
+	CTLineDraw(line.get(), context.get());
 
 	return result;
 }
