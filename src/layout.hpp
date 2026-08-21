@@ -18,18 +18,29 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <limits>
+inline constexpr double negative_infinity = -std::numeric_limits<double>::infinity();
+
 struct ink_extents {
-	double width = 0.0;
-	double ascent = 0.0;
-	double descent = 0.0;
-	double left = 0.0;
+	double width = 0;
+	double ascent = 0;
+	double descent = 0;
+	double left = 0;
 
 	double height() const { return ascent + descent; }
 };
 
 struct ink_span {
-	double ascent = 0.0;
-	double descent = 0.0;
+	double ascent = negative_infinity;
+	double descent = negative_infinity;
+
+	double height() const { return ascent + descent; }
+};
+
+struct row_extents {
+	double width = 0;
+	double ascent = negative_infinity;
+	double descent = negative_infinity;
 
 	double height() const { return ascent + descent; }
 };
