@@ -169,6 +169,41 @@ double solve_point_size(const std::array<ink_extents, 10> &digits, const double 
 	return reference_point_size * target_height / reference_height;
 }
 
+row_extents date_reference_extents(const row_style &row)
+{
+	std::string widest_date;
+	double widest = 0;
+	for (int month = 1; month <= 12; ++month) {
+		for (int day = 1; day <= 31; ++day) {
+			char text[16];
+			std::snprintf(text, sizeof text, "%d/%d %s", month, day, weekday_names[0]);
+
+			CFPtr<CTLineRef> line = make_line(text, row);
+			if (!line) {
+				return {};
+			}
+			const double width = measure(line.get()).width;
+			if (width > widest) {
+				widest = width;
+				widest_date = std::to_string(month) + "/" + std::to_string(day);
+			}
+		}
+	}
+	if (widest_date.empty()) {
+		return {};
+	}
+
+	row_extents max_extents;
+	for (const char *weekday : weekday_names) {
+		CFPtr<CTLineRef> line = make_line(widest_date + " " + weekday, row);
+		if (!line) {
+			return {};
+		}
+		max_extents.extend(measure(line.get()));
+	}
+	return max_extents;
+}
+
 row_extents time_reference_extents(const row_style &row)
 {
 	row_extents max_extents;
@@ -181,45 +216,10 @@ row_extents time_reference_extents(const row_style &row)
 			if (!line) {
 				return {};
 			}
-			ink_extents extents = measure(line.get());
-			max_extents.width = std::max(max_extents.width, extents.width);
-			max_extents.ascent = std::max(max_extents.ascent, extents.ascent);
-			max_extents.descent = std::max(max_extents.descent, extents.descent);
+			max_extents.extend(measure(line.get()));
 		}
 	}
 	return max_extents;
-}
-
-double date_reference_width(const row_style &row)
-{
-	std::string widest_date;
-	double widest = 0;
-	for (int month = 0; month < 12; ++month) {
-		for (int day = 0; day < 31; ++day) {
-			char text[16];
-			std::snprintf(text, sizeof text, "%d/%d %s", month + 1, day + 1, weekday_names[0]);
-
-			CFPtr<CTLineRef> line = make_line(text, row);
-			if (!line) {
-				return 0;
-			}
-			const double width = measure(line.get()).width;
-			if (width > widest) {
-				widest = width;
-				widest_date = std::to_string(month) + "/" + std::to_string(day);
-			}
-		}
-	}
-
-	double result = 0;
-	for (const char *weekday : weekday_names) {
-		CFPtr<CTLineRef> line = make_line(widest_date + " " + weekday, row);
-		if (!line) {
-			return 0;
-		}
-		result = std::max(result, measure(line.get()).width);
-	}
-	return result;
 }
 
 rendered_text render_text(const clock_style &style)
@@ -247,7 +247,7 @@ rendered_text render_text(const clock_style &style)
 	const row_style date_row = {.font = date_font.get(), .color = color.get()};
 	const row_style time_row = {.font = time_font.get(), .color = color.get()};
 
-	row_extents date_extents = time_reference_extents({.font = date_font.get()});
+	row_extents date_extents = date_reference_extents({.font = date_font.get()});
 	row_extents time_extents = time_reference_extents({.font = time_font.get()});
 	if (date_extents.width <= 0 || time_extents.width <= 0) {
 		return {};

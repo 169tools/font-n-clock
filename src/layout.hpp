@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <algorithm>
 #include <limits>
 inline constexpr double negative_infinity = -std::numeric_limits<double>::infinity();
 
@@ -43,4 +44,11 @@ struct row_extents {
 	double descent = negative_infinity;
 
 	double height() const { return ascent + descent; }
+
+	void extend(const ink_extents &extents)
+	{
+		width = std::max(width, extents.width);
+		ascent = std::max(ascent, extents.ascent);
+		descent = std::max(descent, extents.descent);
+	}
 };
