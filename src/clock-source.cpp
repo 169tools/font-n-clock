@@ -17,6 +17,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "text-renderer.hpp"
+#include <algorithm>
+#include <cstdio>
+#include <ctime>
 #include <obs.h>
 #include <obs-data.h>
 #include <obs-module.h>
@@ -30,8 +33,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 struct clock_source {
 	obs_source_t *src;
-	std::string text;
-	vec4 color;
+
+	clock_content content;
+	std::time_t last_read = 0;
 
 	gs_texture_t *tex = nullptr;
 	std::uint32_t tex_width = 0;
@@ -45,28 +49,35 @@ const char *clock_source_get_name(void *)
 
 static void clock_source_rebuild_texture(clock_source *context)
 {
-	const rendered_text bitmap = render_text({.font_face = "Outfit", .font_style = "Bold"});
+	const rendered_text bitmap =
+		render_text({.font_face = "Tsukushi A Round Gothic", .font_style = "Bold"}, context->content);
+	if (bitmap.width == 0 || bitmap.height == 0 || bitmap.pixels.empty()) {
+		return;
+	}
 	const std::uint8_t *rows = bitmap.pixels.data();
 
 	obs_enter_graphics();
-	if (context->tex) {
-		gs_texture_destroy(context->tex);
+	if (context->tex && context->tex_width == bitmap.width && context->tex_height == bitmap.height) {
+		gs_texture_set_image(context->tex, rows, bitmap.width * 4, false);
+	} else {
+		if (context->tex) {
+			gs_texture_destroy(context->tex);
+		}
+		context->tex = gs_texture_create(bitmap.width, bitmap.height, GS_RGBA, 1, &rows, GS_DYNAMIC);
+		context->tex_width = bitmap.width;
+		context->tex_height = bitmap.height;
 	}
-	context->tex = gs_texture_create(bitmap.width, bitmap.height, GS_RGBA, 1, &rows, GS_DYNAMIC);
 	obs_leave_graphics();
-
-	context->tex_width = bitmap.width;
-	context->tex_height = bitmap.height;
 }
 
-void clock_source_update(void *data, obs_data_t *settings)
+void clock_source_update(void *, obs_data_t *)
 {
-	auto *context = static_cast<clock_source *>(data);
-	context->text = static_cast<std::string>(obs_data_get_string(settings, "text"));
-	std::uint32_t color = static_cast<std::uint32_t>(obs_data_get_int(settings, "color"));
-	vec4_from_rgba(&context->color, color);
+	// auto *context = static_cast<clock_source *>(data);
+	// context->text = static_cast<std::string>(obs_data_get_string(settings, "text"));
+	// std::uint32_t color = static_cast<std::uint32_t>(obs_data_get_int(settings, "color"));
+	// vec4_from_rgba(&context->color, color);
 
-	clock_source_rebuild_texture(context);
+	// clock_source_rebuild_texture(context);
 }
 
 void *clock_source_create(obs_data_t *settings, obs_source_t *source)
@@ -102,6 +113,54 @@ void clock_source_get_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, "text", "12:34");
 	obs_data_set_default_int(settings, "color", 0xFFAAA500);
+}
+
+clock_content read_clock(std::time_t now)
+{
+	std::tm local = {};
+#ifdef _WIN32
+	localtime_s(&local, &now);
+#else
+	localtime_r(&now, &local);
+#endif
+	const int month = std::clamp(local.tm_mon + 1, 1, 12);
+	const int day = std::clamp(local.tm_mday, 1, 31);
+	const int hour = std::clamp(local.tm_hour, 0, 23);
+	const int minute = std::clamp(local.tm_min, 0, 59);
+	const char *weekday = weekday_names[std::clamp(local.tm_wday, 0, 6)];
+
+	char date_text[10];
+	char time_text[6];
+	std::snprintf(date_text, sizeof date_text, "%d/%d %s", month, day, weekday);
+	std::snprintf(time_text, sizeof time_text, "%d:%02d", hour, minute);
+
+	return {.date = date_text, .time = time_text};
+}
+
+bool refresh_content(clock_source *context)
+{
+	const std::time_t now = std::time(nullptr);
+	if (now == context->last_read) {
+		return false;
+	}
+	context->last_read = now;
+
+	clock_content content = read_clock(now);
+	if (content.date == context->content.date && content.time == context->content.time) {
+		return false;
+	}
+
+	context->content = content;
+	return true;
+}
+
+void clock_source_video_tick(void *data, float)
+{
+	auto *context = static_cast<clock_source *>(data);
+	if (!refresh_content(context)) {
+		return;
+	}
+	clock_source_rebuild_texture(context);
 }
 
 void clock_source_render(void *data, gs_effect *)
@@ -148,6 +207,7 @@ obs_source_info info = {
 	.get_defaults = clock_source_get_defaults,
 	.get_properties = clock_source_get_properties,
 	.update = clock_source_update,
+	.video_tick = clock_source_video_tick,
 	.video_render = clock_source_render,
 	.icon_type = OBS_ICON_TYPE_COLOR,
 };

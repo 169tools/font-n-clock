@@ -36,4 +36,11 @@ struct rendered_text {
 	std::vector<std::uint8_t> pixels;
 };
 
-rendered_text render_text(const clock_style &style);
+struct clock_content {
+	std::string date;
+	std::string time;
+};
+
+constexpr const char *weekday_names[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+
+rendered_text render_text(const clock_style &style, const clock_content &content);
