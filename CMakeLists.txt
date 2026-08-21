@@ -10,6 +10,7 @@ option(ENABLE_QT "Use Qt functionality" OFF)
 include(compilerconfig)
 include(defaults)
 include(helpers)
+set(CMAKE_CXX_STANDARD 20)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
@@ -36,7 +37,7 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/plugin-main.cpp src/clock-source.cpp src/clock-source.hpp src/text-renderer.hpp
+  PRIVATE src/plugin-main.cpp src/clock-source.cpp src/clock-source.hpp src/layout.hpp src/text-renderer.hpp
 )
 
 if(APPLE)

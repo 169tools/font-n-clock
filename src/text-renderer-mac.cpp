@@ -36,10 +36,21 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreText/CTLine.h>
 #include <CoreText/CTStringAttributes.h>
 #include <MacTypes.h>
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <limits>
 #include <string>
+
+constexpr double reference_point_size = 100;
+
+struct row_style {
+	CTFontRef font = nullptr;
+	CGColorRef color = nullptr;
+};
 
 CFPtr<CFStringRef> make_cfstring(const std::string &value)
 {
@@ -48,10 +59,10 @@ CFPtr<CFStringRef> make_cfstring(const std::string &value)
 							  false));
 }
 
-CFPtr<CTFontRef> make_font()
+CFPtr<CTFontRef> make_font(const std::string &face, const std::string &style, const double point_size)
 {
-	CFPtr<CFStringRef> face = make_cfstring("Tsukushi B Round Gothic");
-	if (!face) {
+	CFPtr<CFStringRef> font_face = make_cfstring(face);
+	if (!font_face) {
 		return {};
 	}
 
@@ -60,26 +71,20 @@ CFPtr<CTFontRef> make_font()
 	if (!attributes) {
 		return {};
 	}
-	CFDictionarySetValue(attributes.get(), kCTFontFamilyNameAttribute, face.get());
+	CFDictionarySetValue(attributes.get(), kCTFontFamilyNameAttribute, font_face.get());
 
-	CFPtr<CFStringRef> style = make_cfstring("Bold");
-	if (!style) {
+	CFPtr<CFStringRef> font_style = make_cfstring(style);
+	if (!font_style) {
 		return {};
 	}
-	CFDictionarySetValue(attributes.get(), kCTFontStyleNameAttribute, style.get());
+	CFDictionarySetValue(attributes.get(), kCTFontStyleNameAttribute, font_style.get());
 
 	CFPtr<CTFontDescriptorRef> descriptor(CTFontDescriptorCreateWithAttributes(attributes.get()));
 	if (!descriptor) {
 		return {};
 	}
-	double point_size = 96;
 	return CFPtr<CTFontRef>(CTFontCreateWithFontDescriptor(descriptor.get(), point_size, nullptr));
 }
-
-struct row_style {
-	CTFontRef font = nullptr;
-	CGColorRef color = nullptr;
-};
 
 CFPtr<CGColorRef> make_color(std::uint32_t abgr)
 {
@@ -105,7 +110,8 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 
 	const void *keys[] = {kCTFontAttributeName, kCTForegroundColorAttributeName};
 	const void *values[] = {row.font, row.color};
-	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
+	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, row.color ? 2 : 1,
+							     &kCFTypeDictionaryKeyCallBacks,
 							     &kCFTypeDictionaryValueCallBacks));
 	if (!attributes) {
 		return {};
@@ -122,23 +128,92 @@ ink_extents measure(CTLineRef line)
 {
 	const CGRect bounds = CTLineGetBoundsWithOptions(line, kCTLineBoundsUseGlyphPathBounds);
 
-	ink_extents extents;
-	extents.width = bounds.size.width;
-	extents.left = bounds.origin.x;
-	extents.ascent = bounds.origin.y + bounds.size.height;
-	extents.descent = -bounds.origin.y;
-	return extents;
-};
+	return {.width = bounds.size.width,
+		.ascent = bounds.origin.y + bounds.size.height,
+		.descent = -bounds.origin.y,
+		.left = bounds.origin.x};
+}
 
-rendered_text render_text()
+std::array<ink_extents, 10> digit_extents(const row_style &row)
 {
-	CFPtr<CTFontRef> font = make_font();
+	std::array<ink_extents, 10> digits;
+	for (int i = 0; i <= 9; ++i) {
+		CFPtr<CTLineRef> line = make_line(std::string(1, static_cast<char>('0' + i)), row);
+		if (!line) {
+			return {};
+		}
+		digits[i] = measure(line.get());
+	}
+	return digits;
+}
+
+ink_span digit_envelope(const std::array<ink_extents, 10> &digits)
+{
+	const double infinity = std::numeric_limits<double>::infinity();
+	ink_span envelope{.ascent = -infinity, .descent = -infinity};
+	for (int i = 0; i <= 9; ++i) {
+		const ink_extents extents = digits[i];
+		envelope.ascent = std::max(envelope.ascent, extents.ascent);
+		envelope.descent = std::max(envelope.descent, extents.descent);
+	}
+	return envelope;
+}
+
+double solve_point_size(const std::array<ink_extents, 10> &digits, const double target_height)
+{
+	const double reference_height = digit_envelope(digits).height();
+	if (reference_height <= 0) {
+		return 0;
+	}
+	return reference_point_size * target_height / reference_height;
+}
+
+double time_reference_width(const row_style &row)
+{
+	double widest = 0;
+	for (int hour = 0; hour < 24; ++hour) {
+		for (int minute = 0; minute < 60; ++minute) {
+			char text[6];
+			std::snprintf(text, sizeof text, "%d:%02d", hour, minute);
+
+			CFPtr<CTLineRef> line = make_line(text, row);
+			if (!line) {
+				return 0;
+			}
+			widest = std::max(widest, measure(line.get()).width);
+		}
+	}
+	return widest;
+}
+
+rendered_text render_text(const clock_style &style)
+{
+	CFPtr<CTFontRef> probe = make_font(style.font_face, style.font_style, reference_point_size);
+	if (!probe) {
+		return {};
+	}
+
+	const double point_size = solve_point_size(digit_extents({.font = probe.get()}), style.time_ink_height);
+	if (point_size <= 0) {
+		return {};
+	}
+
+	CFPtr<CTFontRef> font = make_font(style.font_face, style.font_style, point_size);
 	if (!font) {
 		return {};
 	}
 
-	CFPtr<CGColorRef> color = make_color(0xffaaa500);
+	CFPtr<CGColorRef> color = make_color(style.color);
 	if (!color) {
+		return {};
+	}
+
+	const row_style row = {.font = font.get(), .color = color.get()};
+	const std::array<ink_extents, 10> digits = digit_extents(row);
+
+	const double reference_width = time_reference_width(row);
+	const ink_span envelope = digit_envelope(digits);
+	if (reference_width <= 0 || envelope.height() <= 0) {
 		return {};
 	}
 
@@ -147,10 +222,10 @@ rendered_text render_text()
 		return {};
 	}
 
-	rendered_text result;
-	ink_extents ink = measure(line.get());
-	result.width = static_cast<std::uint32_t>(std::ceil(ink.width));
-	result.height = static_cast<std::uint32_t>(std::ceil(ink.height()));
+	rendered_text result = {
+		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
+		.height = static_cast<std::uint32_t>(std::ceil(envelope.height())),
+	};
 	result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
 
 	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
@@ -172,7 +247,10 @@ rendered_text render_text()
 	CGContextSetShouldAntialias(context.get(), true);
 	CGContextSetShouldSmoothFonts(context.get(), false);
 	CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
-	CGContextSetTextPosition(context.get(), -ink.left, ink.descent);
+
+	const ink_extents ink = measure(line.get());
+	CGContextSetTextPosition(context.get(), (reference_width - ink.width) / 2 - ink.left, envelope.descent);
+
 	CTLineDraw(line.get(), context.get());
 
 	return result;

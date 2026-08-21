@@ -45,7 +45,7 @@ const char *clock_source_get_name(void *)
 
 static void clock_source_rebuild_texture(clock_source *context)
 {
-	const rendered_text bitmap = render_text();
+	const rendered_text bitmap = render_text({.font_face = "Outfit", .font_style = "Bold"});
 	const std::uint8_t *rows = bitmap.pixels.data();
 
 	obs_enter_graphics();

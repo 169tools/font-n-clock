@@ -19,7 +19,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
+
+struct clock_style {
+	std::string font_face;
+	std::string font_style;
+	double date_ink_height = 20;
+	double time_ink_height = 50;
+	std::uint32_t color = 0xffffffff;
+};
 
 struct rendered_text {
 	std::uint32_t width = 0;
@@ -27,4 +36,4 @@ struct rendered_text {
 	std::vector<std::uint8_t> pixels;
 };
 
-rendered_text render_text();
+rendered_text render_text(const clock_style &style);

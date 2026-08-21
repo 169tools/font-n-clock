@@ -26,3 +26,10 @@ struct ink_extents {
 
 	double height() const { return ascent + descent; }
 };
+
+struct ink_span {
+	double ascent = 0.0;
+	double descent = 0.0;
+
+	double height() const { return ascent + descent; }
+};

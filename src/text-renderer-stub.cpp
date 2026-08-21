@@ -19,7 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "text-renderer.hpp"
 #include <cstddef>
 
-rendered_text render_text()
+rendered_text render_text(const clock_style &)
 {
-	return rendered_text();
+	return {};
 }
