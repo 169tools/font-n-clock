@@ -42,10 +42,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <limits>
+#include <ctime>
 #include <string>
 
 constexpr double reference_point_size = 100;
+constexpr double date_and_time_spacing = 12;
+constexpr const char *weekday_names[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
 struct row_style {
 	CTFontRef font = nullptr;
@@ -136,7 +138,7 @@ ink_extents measure(CTLineRef line)
 
 std::array<ink_extents, 10> digit_extents(const row_style &row)
 {
-	std::array<ink_extents, 10> digits;
+	std::array<ink_extents, 10> digits{};
 	for (int i = 0; i <= 9; ++i) {
 		CFPtr<CTLineRef> line = make_line(std::string(1, static_cast<char>('0' + i)), row);
 		if (!line) {
@@ -149,8 +151,7 @@ std::array<ink_extents, 10> digit_extents(const row_style &row)
 
 ink_span digit_envelope(const std::array<ink_extents, 10> &digits)
 {
-	const double infinity = std::numeric_limits<double>::infinity();
-	ink_span envelope{.ascent = -infinity, .descent = -infinity};
+	ink_span envelope;
 	for (int i = 0; i <= 9; ++i) {
 		const ink_extents extents = digits[i];
 		envelope.ascent = std::max(envelope.ascent, extents.ascent);
@@ -168,9 +169,44 @@ double solve_point_size(const std::array<ink_extents, 10> &digits, const double 
 	return reference_point_size * target_height / reference_height;
 }
 
-double time_reference_width(const row_style &row)
+row_extents date_reference_extents(const row_style &row)
 {
+	std::string widest_date;
 	double widest = 0;
+	for (int month = 1; month <= 12; ++month) {
+		for (int day = 1; day <= 31; ++day) {
+			char text[16];
+			std::snprintf(text, sizeof text, "%d/%d %s", month, day, weekday_names[0]);
+
+			CFPtr<CTLineRef> line = make_line(text, row);
+			if (!line) {
+				return {};
+			}
+			const double width = measure(line.get()).width;
+			if (width > widest) {
+				widest = width;
+				widest_date = std::to_string(month) + "/" + std::to_string(day);
+			}
+		}
+	}
+	if (widest_date.empty()) {
+		return {};
+	}
+
+	row_extents max_extents;
+	for (const char *weekday : weekday_names) {
+		CFPtr<CTLineRef> line = make_line(widest_date + " " + weekday, row);
+		if (!line) {
+			return {};
+		}
+		max_extents.extend(measure(line.get()));
+	}
+	return max_extents;
+}
+
+row_extents time_reference_extents(const row_style &row)
+{
+	row_extents max_extents;
 	for (int hour = 0; hour < 24; ++hour) {
 		for (int minute = 0; minute < 60; ++minute) {
 			char text[6];
@@ -178,12 +214,12 @@ double time_reference_width(const row_style &row)
 
 			CFPtr<CTLineRef> line = make_line(text, row);
 			if (!line) {
-				return 0;
+				return {};
 			}
-			widest = std::max(widest, measure(line.get()).width);
+			max_extents.extend(measure(line.get()));
 		}
 	}
-	return widest;
+	return max_extents;
 }
 
 rendered_text render_text(const clock_style &style)
@@ -193,50 +229,56 @@ rendered_text render_text(const clock_style &style)
 		return {};
 	}
 
-	const double point_size = solve_point_size(digit_extents({.font = probe.get()}), style.time_ink_height);
-	if (point_size <= 0) {
+	const std::array<ink_extents, 10> probe_digits = digit_extents({.font = probe.get()});
+
+	const double date_point_size = solve_point_size(probe_digits, style.date_ink_height);
+	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height);
+	if (date_point_size <= 0 || time_point_size <= 0) {
 		return {};
 	}
 
-	CFPtr<CTFontRef> font = make_font(style.font_face, style.font_style, point_size);
-	if (!font) {
-		return {};
-	}
-
+	CFPtr<CTFontRef> date_font = make_font(style.font_face, style.font_style, date_point_size);
+	CFPtr<CTFontRef> time_font = make_font(style.font_face, style.font_style, time_point_size);
 	CFPtr<CGColorRef> color = make_color(style.color);
-	if (!color) {
+	if (!date_font || !time_font || !color) {
 		return {};
 	}
 
-	const row_style row = {.font = font.get(), .color = color.get()};
-	const std::array<ink_extents, 10> digits = digit_extents(row);
+	const row_style date_row = {.font = date_font.get(), .color = color.get()};
+	const row_style time_row = {.font = time_font.get(), .color = color.get()};
 
-	const double reference_width = time_reference_width(row);
-	const ink_span envelope = digit_envelope(digits);
-	if (reference_width <= 0 || envelope.height() <= 0) {
+	row_extents date_extents = date_reference_extents({.font = date_font.get()});
+	row_extents time_extents = time_reference_extents({.font = time_font.get()});
+	if (date_extents.width <= 0 || time_extents.width <= 0) {
 		return {};
 	}
+	const double reference_width = std::max(date_extents.width, time_extents.width);
 
-	CFPtr<CTLineRef> line = make_line("12:34", row_style(font.get(), color.get()));
-	if (!line) {
+	const double time_baseline_y = time_extents.descent;
+	const double date_baseline_y =
+		time_baseline_y + time_extents.ascent + date_and_time_spacing + date_extents.descent;
+	const double reference_height = date_baseline_y + date_extents.ascent;
+
+	CFPtr<CTLineRef> date_line = make_line("5/6 WED", date_row);
+	CFPtr<CTLineRef> time_line = make_line("12:34", time_row);
+	if (!date_line || !time_line) {
 		return {};
 	}
-
-	rendered_text result = {
-		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
-		.height = static_cast<std::uint32_t>(std::ceil(envelope.height())),
-	};
-	result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
 
 	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
 	if (!space) {
 		return {};
 	}
 
+	rendered_text result = {
+		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
+		.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
+	};
+	result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
+
 	const CGBitmapInfo bitmap_info =
 		static_cast<CGBitmapInfo>(static_cast<std::uint32_t>(kCGImageAlphaPremultipliedLast) |
 					  static_cast<std::uint32_t>(kCGBitmapByteOrder32Big));
-
 	CFPtr<CGContextRef> context(CGBitmapContextCreate(result.pixels.data(), result.width, result.height, 8,
 							  static_cast<std::size_t>(result.width) * 4, space.get(),
 							  bitmap_info));
@@ -248,10 +290,15 @@ rendered_text render_text(const clock_style &style)
 	CGContextSetShouldSmoothFonts(context.get(), false);
 	CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
 
-	const ink_extents ink = measure(line.get());
-	CGContextSetTextPosition(context.get(), (reference_width - ink.width) / 2 - ink.left, envelope.descent);
+	const ink_extents date_ink = measure(date_line.get());
+	CGContextSetTextPosition(context.get(), (reference_width - date_ink.width) / 2 - date_ink.left,
+				 date_baseline_y);
+	CTLineDraw(date_line.get(), context.get());
 
-	CTLineDraw(line.get(), context.get());
+	const ink_extents time_ink = measure(time_line.get());
+	CGContextSetTextPosition(context.get(), (reference_width - time_ink.width) / 2 - time_ink.left,
+				 time_baseline_y);
+	CTLineDraw(time_line.get(), context.get());
 
 	return result;
 }
