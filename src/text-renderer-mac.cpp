@@ -110,7 +110,8 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 
 	const void *keys[] = {kCTFontAttributeName, kCTForegroundColorAttributeName};
 	const void *values[] = {row.font, row.color};
-	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
+	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, row.color ? 2 : 1,
+							     &kCFTypeDictionaryKeyCallBacks,
 							     &kCFTypeDictionaryValueCallBacks));
 	if (!attributes) {
 		return {};
