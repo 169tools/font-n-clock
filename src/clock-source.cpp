@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "text-renderer.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <ctime>
 #include <obs.h>
@@ -29,7 +30,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <graphics/graphics.h>
 #include <graphics/vec4.h>
 #include <string>
-#include <utility>
 
 struct clock_source {
 	obs_source_t *src;
@@ -118,12 +118,21 @@ void clock_source_get_defaults(obs_data_t *settings)
 clock_content read_clock(std::time_t now)
 {
 	std::tm local = {};
+#ifdef _WIN32
+	localtime_s(&local, &now);
+#else
 	localtime_r(&now, &local);
+#endif
+	const int month = std::clamp(local.tm_mon + 1, 1, 12);
+	const int day = std::clamp(local.tm_mday, 1, 31);
+	const int hour = std::clamp(local.tm_hour, 0, 23);
+	const int minute = std::clamp(local.tm_min, 0, 59);
+	const char *weekday = weekday_names[std::clamp(local.tm_wday, 0, 6)];
+
 	char date_text[10];
 	char time_text[6];
-	std::snprintf(date_text, sizeof date_text, "%d/%d %s", local.tm_mon + 1, local.tm_mday,
-		      weekday_names[local.tm_wday]);
-	std::snprintf(time_text, sizeof time_text, "%d:%02d", local.tm_hour, local.tm_min);
+	std::snprintf(date_text, sizeof date_text, "%d/%d %s", month, day, weekday);
+	std::snprintf(time_text, sizeof time_text, "%d:%02d", hour, minute);
 
 	return {.date = date_text, .time = time_text};
 }
