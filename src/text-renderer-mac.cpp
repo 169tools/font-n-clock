@@ -45,14 +45,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <ctime>
 #include <string>
 
-constexpr double reference_point_size = 100;
-constexpr double date_and_time_spacing = 12;
-constexpr const char *weekday_names[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
-
 struct row_style {
 	CTFontRef font = nullptr;
 	CGColorRef color = nullptr;
 };
+
+constexpr double reference_point_size = 100;
+constexpr double date_and_time_spacing = 12;
 
 CFPtr<CFStringRef> make_cfstring(const std::string &value)
 {
@@ -222,7 +221,7 @@ row_extents time_reference_extents(const row_style &row)
 	return max_extents;
 }
 
-rendered_text render_text(const clock_style &style)
+rendered_text render_text(const clock_style &style, const clock_content &content)
 {
 	CFPtr<CTFontRef> probe = make_font(style.font_face, style.font_style, reference_point_size);
 	if (!probe) {
@@ -259,8 +258,8 @@ rendered_text render_text(const clock_style &style)
 		time_baseline_y + time_extents.ascent + date_and_time_spacing + date_extents.descent;
 	const double reference_height = date_baseline_y + date_extents.ascent;
 
-	CFPtr<CTLineRef> date_line = make_line("5/6 WED", date_row);
-	CFPtr<CTLineRef> time_line = make_line("12:34", time_row);
+	CFPtr<CTLineRef> date_line = make_line(content.date, date_row);
+	CFPtr<CTLineRef> time_line = make_line(content.time, time_row);
 	if (!date_line || !time_line) {
 		return {};
 	}
