@@ -120,7 +120,7 @@ static void clock_source_rebuild_texture(clock_source *context)
 void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
-	auto size = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::size));
+	auto size = static_cast<double>(obs_data_get_int(settings, settings::size));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color));
 	context->clock = prepare_clock(
 		{.font_face = "Tsukushi A Round Gothic", .font_style = "Bold", .size = size, .color = color});
