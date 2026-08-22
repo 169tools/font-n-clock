@@ -112,10 +112,11 @@ static void clock_source_rebuild_texture(clock_source *context)
 	obs_leave_graphics();
 }
 
-void clock_source_update(void *data, obs_data_t *)
+void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
-	context->clock = prepare_clock({.font_face = "Tsukushi A Round Gothic", .font_style = "Bold"});
+	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, "color"));
+	context->clock = prepare_clock({.font_face = "Tsukushi A Round Gothic", .font_style = "Bold", .color = color});
 
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
@@ -153,7 +154,7 @@ std::uint32_t clock_source_get_height(void *data)
 void clock_source_get_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, "text", "12:34");
-	obs_data_set_default_int(settings, "color", 0xFFAAA500);
+	obs_data_set_default_int(settings, "color", 0xFFFFFFFF);
 }
 
 void clock_source_video_tick(void *data, float)
