@@ -26,9 +26,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 struct clock_style {
 	std::string font_face;
 	std::string font_style;
-	double date_ink_height = 20;
-	double time_ink_height = 50;
+	std::uint32_t size = 50;
 	std::uint32_t color = 0xffffffff;
+
+	double date_ink_height() const noexcept { return size * 0.4; }
+	double time_ink_height() const noexcept { return size; }
+	double date_and_time_spacing() const noexcept { return size * 0.24; };
+	double margin() const noexcept { return size * 0.32; };
 };
 
 struct rendered_text {
