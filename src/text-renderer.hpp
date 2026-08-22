@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,8 @@ struct rendered_text {
 	std::uint32_t width = 0;
 	std::uint32_t height = 0;
 	std::vector<std::uint8_t> pixels;
+
+	bool valid() const noexcept { return width > 0 && height > 0 && !pixels.empty(); }
 };
 
 struct clock_content {
@@ -43,4 +46,17 @@ struct clock_content {
 
 constexpr const char *weekday_names[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
-rendered_text render_text(const clock_style &style, const clock_content &content);
+class prepared_clock {
+public:
+	virtual ~prepared_clock() = default;
+
+	prepared_clock(const prepared_clock &) = delete;
+	prepared_clock &operator=(const prepared_clock &) = delete;
+
+	virtual rendered_text render(const clock_content &content) const = 0;
+
+protected:
+	prepared_clock() = default;
+};
+
+std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style);

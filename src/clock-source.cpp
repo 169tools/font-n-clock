@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <algorithm>
 #include <cstdio>
 #include <ctime>
+#include <memory>
 #include <obs.h>
 #include <obs-data.h>
 #include <obs-module.h>
@@ -30,9 +31,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <graphics/graphics.h>
 #include <graphics/vec4.h>
 #include <string>
+#include <utility>
 
 struct clock_source {
 	obs_source_t *src;
+
+	std::unique_ptr<prepared_clock> clock;
 
 	clock_content content;
 	std::time_t last_read = 0;
@@ -45,74 +49,6 @@ struct clock_source {
 const char *clock_source_get_name(void *)
 {
 	return obs_module_text("ClockSource");
-}
-
-static void clock_source_rebuild_texture(clock_source *context)
-{
-	const rendered_text bitmap =
-		render_text({.font_face = "Tsukushi A Round Gothic", .font_style = "Bold"}, context->content);
-	if (bitmap.width == 0 || bitmap.height == 0 || bitmap.pixels.empty()) {
-		return;
-	}
-	const std::uint8_t *rows = bitmap.pixels.data();
-
-	obs_enter_graphics();
-	if (context->tex && context->tex_width == bitmap.width && context->tex_height == bitmap.height) {
-		gs_texture_set_image(context->tex, rows, bitmap.width * 4, false);
-	} else {
-		if (context->tex) {
-			gs_texture_destroy(context->tex);
-		}
-		context->tex = gs_texture_create(bitmap.width, bitmap.height, GS_RGBA, 1, &rows, GS_DYNAMIC);
-		context->tex_width = bitmap.width;
-		context->tex_height = bitmap.height;
-	}
-	obs_leave_graphics();
-}
-
-void clock_source_update(void *, obs_data_t *)
-{
-	// auto *context = static_cast<clock_source *>(data);
-	// context->text = static_cast<std::string>(obs_data_get_string(settings, "text"));
-	// std::uint32_t color = static_cast<std::uint32_t>(obs_data_get_int(settings, "color"));
-	// vec4_from_rgba(&context->color, color);
-
-	// clock_source_rebuild_texture(context);
-}
-
-void *clock_source_create(obs_data_t *settings, obs_source_t *source)
-{
-	clock_source *context = new clock_source();
-	context->src = source;
-	clock_source_update(context, settings);
-	return context;
-}
-
-void clock_source_destroy(void *data)
-{
-	auto *context = static_cast<clock_source *>(data);
-	if (context->tex) {
-		obs_enter_graphics();
-		gs_texture_destroy(context->tex);
-		obs_leave_graphics();
-	}
-	delete context;
-}
-
-std::uint32_t clock_source_get_width(void *data)
-{
-	return static_cast<clock_source *>(data)->tex_width;
-}
-
-std::uint32_t clock_source_get_height(void *data)
-{
-	return static_cast<clock_source *>(data)->tex_height;
-}
-
-void clock_source_get_defaults(obs_data_t *settings)
-{
-	obs_data_set_default_string(settings, "text", "12:34");
-	obs_data_set_default_int(settings, "color", 0xFFAAA500);
 }
 
 clock_content read_clock(std::time_t now)
@@ -150,8 +86,74 @@ bool refresh_content(clock_source *context)
 		return false;
 	}
 
-	context->content = content;
+	context->content = std::move(content);
 	return true;
+}
+
+static void clock_source_rebuild_texture(clock_source *context)
+{
+	const rendered_text bitmap = context->clock ? context->clock->render(context->content) : rendered_text{};
+	if (!bitmap.valid()) {
+		return;
+	}
+	const std::uint8_t *rows = bitmap.pixels.data();
+
+	obs_enter_graphics();
+	if (context->tex && context->tex_width == bitmap.width && context->tex_height == bitmap.height) {
+		gs_texture_set_image(context->tex, rows, bitmap.width * 4, false);
+	} else {
+		if (context->tex) {
+			gs_texture_destroy(context->tex);
+		}
+		context->tex = gs_texture_create(bitmap.width, bitmap.height, GS_RGBA, 1, &rows, GS_DYNAMIC);
+		context->tex_width = bitmap.width;
+		context->tex_height = bitmap.height;
+	}
+	obs_leave_graphics();
+}
+
+void clock_source_update(void *data, obs_data_t *)
+{
+	auto *context = static_cast<clock_source *>(data);
+	context->clock = prepare_clock({.font_face = "Tsukushi A Round Gothic", .font_style = "Bold"});
+
+	refresh_content(context);
+	clock_source_rebuild_texture(context);
+}
+
+void *clock_source_create(obs_data_t *settings, obs_source_t *source)
+{
+	clock_source *context = new clock_source();
+	context->src = source;
+	clock_source_update(context, settings);
+	return context;
+}
+
+void clock_source_destroy(void *data)
+{
+	auto *context = static_cast<clock_source *>(data);
+	if (context->tex) {
+		obs_enter_graphics();
+		gs_texture_destroy(context->tex);
+		obs_leave_graphics();
+	}
+	delete context;
+}
+
+std::uint32_t clock_source_get_width(void *data)
+{
+	return static_cast<clock_source *>(data)->tex_width;
+}
+
+std::uint32_t clock_source_get_height(void *data)
+{
+	return static_cast<clock_source *>(data)->tex_height;
+}
+
+void clock_source_get_defaults(obs_data_t *settings)
+{
+	obs_data_set_default_string(settings, "text", "12:34");
+	obs_data_set_default_int(settings, "color", 0xFFAAA500);
 }
 
 void clock_source_video_tick(void *data, float)
