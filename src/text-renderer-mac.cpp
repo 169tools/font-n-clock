@@ -43,7 +43,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
+#include <memory>
 #include <string>
+#include <utility>
 
 struct row_style {
 	CTFontRef font = nullptr;
@@ -64,25 +66,25 @@ CFPtr<CTFontRef> make_font(const std::string &face, const std::string &style, co
 {
 	CFPtr<CFStringRef> font_face = make_cfstring(face);
 	if (!font_face) {
-		return {};
+		return nullptr;
 	}
 
 	CFPtr<CFMutableDictionaryRef> attributes(CFDictionaryCreateMutable(nullptr, 2, &kCFTypeDictionaryKeyCallBacks,
 									   &kCFTypeDictionaryValueCallBacks));
 	if (!attributes) {
-		return {};
+		return nullptr;
 	}
 	CFDictionarySetValue(attributes.get(), kCTFontFamilyNameAttribute, font_face.get());
 
 	CFPtr<CFStringRef> font_style = make_cfstring(style);
 	if (!font_style) {
-		return {};
+		return nullptr;
 	}
 	CFDictionarySetValue(attributes.get(), kCTFontStyleNameAttribute, font_style.get());
 
 	CFPtr<CTFontDescriptorRef> descriptor(CTFontDescriptorCreateWithAttributes(attributes.get()));
 	if (!descriptor) {
-		return {};
+		return nullptr;
 	}
 	return CFPtr<CTFontRef>(CTFontCreateWithFontDescriptor(descriptor.get(), point_size, nullptr));
 }
@@ -91,7 +93,7 @@ CFPtr<CGColorRef> make_color(std::uint32_t abgr)
 {
 	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
 	if (!space) {
-		return {};
+		return nullptr;
 	}
 	const CGFloat components[] = {
 		static_cast<CGFloat>(abgr & 0xff) / 255.0,
@@ -106,7 +108,7 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 {
 	CFPtr<CFStringRef> string = make_cfstring(text);
 	if (!string) {
-		return {};
+		return nullptr;
 	}
 
 	const void *keys[] = {kCTFontAttributeName, kCTForegroundColorAttributeName};
@@ -115,12 +117,12 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 							     &kCFTypeDictionaryKeyCallBacks,
 							     &kCFTypeDictionaryValueCallBacks));
 	if (!attributes) {
-		return {};
+		return nullptr;
 	}
 
 	CFPtr<CFAttributedStringRef> attributed(CFAttributedStringCreate(nullptr, string.get(), attributes.get()));
 	if (!attributed) {
-		return {};
+		return nullptr;
 	}
 	return CFPtr<CTLineRef>(CTLineCreateWithAttributedString(attributed.get()));
 }
@@ -221,11 +223,58 @@ row_extents time_reference_extents(const row_style &row)
 	return max_extents;
 }
 
-rendered_text render_text(const clock_style &style, const clock_content &content)
+void draw_centered(CGContextRef context, CTLineRef line, const double reference_width, const double baseline_y)
+{
+	const ink_extents ink = measure(line);
+	CGContextSetTextPosition(context, (reference_width - ink.width) / 2 - ink.left, baseline_y);
+	CTLineDraw(line, context);
+}
+
+class mac_clock : public prepared_clock {
+public:
+	CFPtr<CTFontRef> date_font;
+	CFPtr<CTFontRef> time_font;
+	CFPtr<CGColorRef> color;
+	CFPtr<CGColorSpaceRef> space;
+	clock_frame frame;
+
+	rendered_text render(const clock_content &content) const override
+	{
+		CFPtr<CTLineRef> date_line = make_line(content.date, {.font = date_font.get(), .color = color.get()});
+		CFPtr<CTLineRef> time_line = make_line(content.time, {.font = time_font.get(), .color = color.get()});
+		if (!date_line || !time_line) {
+			return {};
+		}
+
+		rendered_text result = {.width = frame.width, .height = frame.height};
+		result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
+
+		const CGBitmapInfo bitmap_info =
+			static_cast<CGBitmapInfo>(static_cast<std::uint32_t>(kCGImageAlphaPremultipliedLast) |
+						  static_cast<std::uint32_t>(kCGBitmapByteOrder32Big));
+		CFPtr<CGContextRef> context(CGBitmapContextCreate(result.pixels.data(), result.width, result.height, 8,
+								  static_cast<std::size_t>(result.width) * 4,
+								  space.get(), bitmap_info));
+		if (!context) {
+			return {};
+		}
+
+		CGContextSetShouldAntialias(context.get(), true);
+		CGContextSetShouldSmoothFonts(context.get(), false);
+		CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
+
+		draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
+		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y);
+
+		return result;
+	}
+};
+
+std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
 	CFPtr<CTFontRef> probe = make_font(style.font_face, style.font_style, reference_point_size);
 	if (!probe) {
-		return {};
+		return nullptr;
 	}
 
 	const std::array<ink_extents, 10> probe_digits = digit_extents({.font = probe.get()});
@@ -233,71 +282,39 @@ rendered_text render_text(const clock_style &style, const clock_content &content
 	const double date_point_size = solve_point_size(probe_digits, style.date_ink_height);
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height);
 	if (date_point_size <= 0 || time_point_size <= 0) {
-		return {};
+		return nullptr;
 	}
 
 	CFPtr<CTFontRef> date_font = make_font(style.font_face, style.font_style, date_point_size);
 	CFPtr<CTFontRef> time_font = make_font(style.font_face, style.font_style, time_point_size);
 	CFPtr<CGColorRef> color = make_color(style.color);
-	if (!date_font || !time_font || !color) {
-		return {};
+	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
+	if (!date_font || !time_font || !color || !space) {
+		return nullptr;
 	}
-
-	const row_style date_row = {.font = date_font.get(), .color = color.get()};
-	const row_style time_row = {.font = time_font.get(), .color = color.get()};
 
 	row_extents date_extents = date_reference_extents({.font = date_font.get()});
 	row_extents time_extents = time_reference_extents({.font = time_font.get()});
 	if (date_extents.width <= 0 || time_extents.width <= 0) {
-		return {};
+		return nullptr;
 	}
 	const double reference_width = std::max(date_extents.width, time_extents.width);
-
 	const double time_baseline_y = time_extents.descent;
 	const double date_baseline_y =
 		time_baseline_y + time_extents.ascent + date_and_time_spacing + date_extents.descent;
 	const double reference_height = date_baseline_y + date_extents.ascent;
 
-	CFPtr<CTLineRef> date_line = make_line(content.date, date_row);
-	CFPtr<CTLineRef> time_line = make_line(content.time, time_row);
-	if (!date_line || !time_line) {
-		return {};
-	}
-
-	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
-	if (!space) {
-		return {};
-	}
-
-	rendered_text result = {
+	auto clock = std::make_unique<mac_clock>();
+	clock->date_font = std::move(date_font);
+	clock->time_font = std::move(time_font);
+	clock->color = std::move(color);
+	clock->space = std::move(space);
+	clock->frame = {
 		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
 		.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
+		.reference_width = reference_width,
+		.date_baseline_y = date_baseline_y,
+		.time_baseline_y = time_baseline_y,
 	};
-	result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
-
-	const CGBitmapInfo bitmap_info =
-		static_cast<CGBitmapInfo>(static_cast<std::uint32_t>(kCGImageAlphaPremultipliedLast) |
-					  static_cast<std::uint32_t>(kCGBitmapByteOrder32Big));
-	CFPtr<CGContextRef> context(CGBitmapContextCreate(result.pixels.data(), result.width, result.height, 8,
-							  static_cast<std::size_t>(result.width) * 4, space.get(),
-							  bitmap_info));
-	if (!context) {
-		return {};
-	}
-
-	CGContextSetShouldAntialias(context.get(), true);
-	CGContextSetShouldSmoothFonts(context.get(), false);
-	CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
-
-	const ink_extents date_ink = measure(date_line.get());
-	CGContextSetTextPosition(context.get(), (reference_width - date_ink.width) / 2 - date_ink.left,
-				 date_baseline_y);
-	CTLineDraw(date_line.get(), context.get());
-
-	const ink_extents time_ink = measure(time_line.get());
-	CGContextSetTextPosition(context.get(), (reference_width - time_ink.width) / 2 - time_ink.left,
-				 time_baseline_y);
-	CTLineDraw(time_line.get(), context.get());
-
-	return result;
+	return clock;
 }

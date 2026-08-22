@@ -23,12 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <type_traits>
 
 struct CFDeleter {
-	void operator()(CFTypeRef ref) const noexcept
-	{
-		if (ref) {
-			CFRelease(ref);
-		}
-	}
+	void operator()(CFTypeRef ref) const noexcept { CFRelease(ref); }
 };
 
 template<typename T> using CFPtr = std::unique_ptr<std::remove_pointer_t<T>, CFDeleter>;

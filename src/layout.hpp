@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 inline constexpr double negative_infinity = -std::numeric_limits<double>::infinity();
 
@@ -51,4 +52,13 @@ struct row_extents {
 		ascent = std::max(ascent, extents.ascent);
 		descent = std::max(descent, extents.descent);
 	}
+};
+
+struct clock_frame {
+	std::uint32_t width = 0;
+	std::uint32_t height = 0;
+
+	double reference_width = 0;
+	double date_baseline_y = 0;
+	double time_baseline_y = 0;
 };
