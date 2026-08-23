@@ -36,6 +36,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 namespace settings {
 constexpr const char *size = "size";
 constexpr const char *color = "color";
+constexpr const char *colon_offset_percent = "colon_offset_percent";
 } // namespace settings
 
 struct clock_source {
@@ -122,8 +123,21 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto *context = static_cast<clock_source *>(data);
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color));
-	context->clock = prepare_clock(
-		{.font_face = "Tsukushi A Round Gothic", .font_style = "Bold", .size = size, .color = color});
+	const std::string font_face = "Tsukushi A Round Gothic";
+	const std::string font_style = "Bold";
+
+	if (!obs_data_has_user_value(settings, settings::colon_offset_percent)) {
+		const double suggested_colon_offset_ratio =
+			suggest_colon_offset_ratio({.font_face = font_face, .font_style = font_style});
+		obs_data_set_double(settings, settings::colon_offset_percent,
+				    static_cast<std::uint32_t>(suggested_colon_offset_ratio * 100));
+	}
+	auto colon_offset_percent = static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent));
+	context->clock = prepare_clock({.font_face = font_face,
+					.font_style = font_style,
+					.size = size,
+					.color = color,
+					.colon_offset_ratio = colon_offset_percent / 100});
 
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
@@ -162,6 +176,7 @@ void clock_source_get_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_int(settings, settings::size, 50);
 	obs_data_set_default_int(settings, settings::color, 0xFFFFFFFF);
+	obs_data_set_default_int(settings, settings::colon_offset_percent, 0);
 }
 
 void clock_source_video_tick(void *data, float)
@@ -203,6 +218,8 @@ obs_properties_t *clock_source_get_properties(void *)
 	obs_properties_t *props = obs_properties_create();
 	obs_properties_add_int_slider(props, settings::size, obs_module_text("ClockSource.Size"), 20, 200, 1);
 	obs_properties_add_color(props, settings::color, obs_module_text("ClockSource.Color"));
+	obs_properties_add_int_slider(props, settings::colon_offset_percent,
+				      obs_module_text("ClockSource.ColonOffsetPercent"), -5, 20, 1);
 	return props;
 }
 

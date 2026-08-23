@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "cf-ptr.hpp"
 #include "layout.hpp"
 #include "text-renderer.hpp"
+#include <CoreFoundation/CFArray.h>
 #include <CoreFoundation/CFAttributedString.h>
 #include <CoreFoundation/CFBase.h>
 #include <CoreFoundation/CFCGTypes.h>
@@ -30,7 +31,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreGraphics/CGColor.h>
 #include <CoreGraphics/CGColorSpace.h>
 #include <CoreGraphics/CGContext.h>
+#include <CoreGraphics/CGFont.h>
 #include <CoreGraphics/CGImage.h>
+#include <CoreText/CTRun.h>
 #include <CoreText/CTFont.h>
 #include <CoreText/CTFontDescriptor.h>
 #include <CoreText/CTLine.h>
@@ -46,6 +49,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 struct row_style {
 	CTFontRef font = nullptr;
@@ -222,11 +226,49 @@ row_extents time_reference_extents(const row_style &row)
 	return max_extents;
 }
 
-void draw_centered(CGContextRef context, CTLineRef line, const double reference_width, const double baseline_y)
+void draw_centered(CGContextRef context, CTLineRef line, const double reference_width, const double baseline_y,
+		   const double colon_offset_px = 0)
 {
 	const ink_extents ink = measure(line);
-	CGContextSetTextPosition(context, (reference_width - ink.width) / 2 - ink.left, baseline_y);
-	CTLineDraw(line, context);
+	const double origin_x = (reference_width - ink.width) / 2 - ink.left;
+
+	CFArrayRef runs = CTLineGetGlyphRuns(line);
+	const CFIndex run_count = runs ? CFArrayGetCount(runs) : 0;
+	for (CFIndex r = 0; r < run_count; ++r) {
+		CTRunRef run = static_cast<CTRunRef>(CFArrayGetValueAtIndex(runs, r));
+		const CFIndex count = CTRunGetGlyphCount(run);
+		if (count < 0) {
+			continue;
+		}
+
+		CFDictionaryRef attributes = CTRunGetAttributes(run);
+		CTFontRef run_font =
+			attributes ? static_cast<CTFontRef>(CFDictionaryGetValue(attributes, kCTFontAttributeName))
+				   : nullptr;
+		if (!run_font) {
+			continue;
+		}
+
+		const UniChar colon = ':';
+		CGGlyph colon_glyph = 0;
+		const bool has_colon = CTFontGetGlyphsForCharacters(run_font, &colon, &colon_glyph, 1);
+
+		const auto size = static_cast<std::size_t>(count);
+		std::vector<CGGlyph> glyphs(size);
+		std::vector<CGPoint> positions(size);
+		const CFRange all = CFRangeMake(0, count);
+		CTRunGetGlyphs(run, all, glyphs.data());
+		CTRunGetPositions(run, all, positions.data());
+
+		for (std::size_t i = 0; i < size; ++i) {
+			positions[i].x += origin_x;
+			positions[i].y += baseline_y;
+			if (colon_offset_px != 0 && has_colon && glyphs[i] == colon_glyph) {
+				positions[i].y += colon_offset_px;
+			}
+		}
+		CTFontDrawGlyphs(run_font, glyphs.data(), positions.data(), size, context);
+	}
 }
 
 class mac_clock : public prepared_clock {
@@ -261,9 +303,11 @@ public:
 		CGContextSetShouldAntialias(context.get(), true);
 		CGContextSetShouldSmoothFonts(context.get(), false);
 		CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
+		CGContextSetFillColorWithColor(context.get(), color.get());
 
 		draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
-		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y);
+		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y,
+			      frame.colon_offset_px);
 
 		return result;
 	}
@@ -309,12 +353,39 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->time_font = std::move(time_font);
 	clock->color = std::move(color);
 	clock->space = std::move(space);
-	clock->frame = {
-		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
-		.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
-		.reference_width = reference_width,
-		.date_baseline_y = date_baseline_y + style.margin(),
-		.time_baseline_y = time_baseline_y + style.margin(),
-	};
+	clock->frame = {.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
+			.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
+			.reference_width = reference_width,
+			.date_baseline_y = date_baseline_y + style.margin(),
+			.time_baseline_y = time_baseline_y + style.margin(),
+			.colon_offset_px = style.colon_offset_px()};
 	return clock;
+}
+
+double suggest_colon_offset_ratio(const clock_style &style)
+{
+	if (style.time_ink_height() <= 0) {
+		return 0;
+	}
+	CFPtr<CTFontRef> probe = make_font(style.font_face, style.font_style, reference_point_size);
+	if (!probe) {
+		return 0;
+	}
+
+	const row_style row = {.font = probe.get()};
+
+	const ink_span digits = digit_envelope(digit_extents(row));
+	if (digits.height() <= 0) {
+		return 0;
+	}
+
+	CFPtr<CTLineRef> colon = make_line(":", row);
+	if (!colon) {
+		return 0;
+	}
+	const ink_extents colon_ink = measure(colon.get());
+
+	const double digit_center = (digits.ascent - digits.descent) / 2;
+	const double colon_center = (colon_ink.ascent - colon_ink.descent) / 2;
+	return (digit_center - colon_center) / digits.height() - colon_optional_offset_ratio;
 }

@@ -21,6 +21,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+
+inline constexpr double colon_optional_offset_ratio = 0.015;
 inline constexpr double negative_infinity = -std::numeric_limits<double>::infinity();
 
 struct ink_extents {
@@ -61,4 +63,5 @@ struct clock_frame {
 	double reference_width = 0;
 	double date_baseline_y = 0;
 	double time_baseline_y = 0;
+	double colon_offset_px = 0;
 };
