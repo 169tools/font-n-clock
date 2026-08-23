@@ -33,13 +33,13 @@
 	},
 	"platformConfig": {
 		"macos": {
-			"bundleId": "com.169tools.font-meets-clock"
+			"bundleId": "com.169tools.font-n-clock"
 		}
 	},
-	"name": "font-meets-clock",
-	"displayName": "Font meets Clock | Clock overlay with customizable fonts",
+	"name": "font-n-clock",
+	"displayName": "font-n-clock | Clock overlay with customizable fonts",
 	"version": "1.0.0",
 	"author": "mizznoff",
-	"website": "https://github.com/169tools/font-meets-clock",
+	"website": "https://github.com/169tools/font-n-clock",
 	"email": "mizznoff@gmail.com"
 }

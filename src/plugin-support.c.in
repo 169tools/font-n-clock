@@ -1,5 +1,5 @@
 /*
-font-meets-clock
+font-n-clock
 Copyright (C) 2026 mizznoff <mizznoff@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
