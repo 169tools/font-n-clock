@@ -358,11 +358,12 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	if (date_extents.width <= 0 || time_extents.width <= 0) {
 		return nullptr;
 	}
-	const double reference_width = std::max(date_extents.width, time_extents.width) + style.margin() * 2;
+	const double reference_width = std::max(date_extents.width, time_extents.width) + style.horizontal_margin() * 2;
 	const double time_baseline_y = time_extents.descent;
 	const double date_baseline_y =
 		time_baseline_y + time_extents.ascent + style.date_and_time_spacing() + date_extents.descent;
-	const double reference_height = date_baseline_y + date_extents.ascent + style.margin() * 2;
+	const double reference_height =
+		date_baseline_y + date_extents.ascent + style.top_margin() + style.bottom_margin();
 
 	auto clock = std::make_unique<mac_clock>();
 
@@ -373,8 +374,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->frame = {.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
 			.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
 			.reference_width = reference_width,
-			.date_baseline_y = date_baseline_y + style.margin(),
-			.time_baseline_y = time_baseline_y + style.margin(),
+			.date_baseline_y = date_baseline_y + style.bottom_margin(),
+			.time_baseline_y = time_baseline_y + style.bottom_margin(),
 			.colon_offset_px = style.colon_offset_px()};
 	return clock;
 }

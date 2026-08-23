@@ -43,7 +43,9 @@ struct clock_style {
 	double date_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
 	double date_and_time_spacing() const noexcept { return size * 0.28; }
-	double margin() const noexcept { return size * 0.32; }
+	double top_margin() const noexcept { return size * 0.36; }
+	double bottom_margin() const noexcept { return size * 0.4; }
+	double horizontal_margin() const noexcept { return size * 0.38; }
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 };
 
