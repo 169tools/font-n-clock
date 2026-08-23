@@ -36,8 +36,8 @@
 			"bundleId": "com.169tools.font-n-clock"
 		}
 	},
-	"name": "font-n-clock",
-	"displayName": "font-n-clock | Clock overlay with customizable fonts",
+	"name": "Font-n-Clock",
+	"displayName": "Font-n-Clock | Clock overlay with customizable fonts",
 	"version": "1.0.0",
 	"author": "mizznoff",
 	"website": "https://github.com/169tools/font-n-clock",

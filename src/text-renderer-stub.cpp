@@ -1,5 +1,5 @@
 /*
-font-n-clock
+Font-n-Clock
 Copyright (C) 2026 mizznoff <mizznoff@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
