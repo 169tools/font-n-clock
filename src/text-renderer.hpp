@@ -18,12 +18,22 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
 
+enum class date_format {
+	month_day_weekday, // 12/31 WED
+	day_month_weekday, // 31/12 WED
+	month_name_day,    // DEC 31
+	day_month_name,    // 31 DEC
+};
+
 struct clock_style {
+	date_format format;
 	std::string font_face;
 	std::string font_style;
 	double size = 50;
@@ -32,7 +42,7 @@ struct clock_style {
 
 	double date_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
-	double date_and_time_spacing() const noexcept { return size * 0.24; }
+	double date_and_time_spacing() const noexcept { return size * 0.28; }
 	double margin() const noexcept { return size * 0.32; }
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 };
@@ -50,7 +60,34 @@ struct clock_content {
 	std::string time;
 };
 
+constexpr const char *month_names[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+				       "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
 constexpr const char *weekday_names[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+
+inline std::string format_date(const date_format format, const int month, const int day, const int weekday)
+{
+	const int m = std::clamp(month, 1, 12);
+	const int d = std::clamp(day, 1, 31);
+	const char *month_name = month_names[m - 1];
+	const char *weekday_name = weekday_names[std::clamp(weekday, 0, 6)];
+
+	char text[10] = "";
+	switch (format) {
+	case date_format::month_day_weekday:
+		std::snprintf(text, sizeof text, "%d/%d %s", m, d, weekday_name);
+		break;
+	case date_format::day_month_weekday:
+		std::snprintf(text, sizeof text, "%d/%d %s", d, m, weekday_name);
+		break;
+	case date_format::month_name_day:
+		std::snprintf(text, sizeof text, "%s %d", month_name, d);
+		break;
+	case date_format::day_month_name:
+		std::snprintf(text, sizeof text, "%d %s", d, month_name);
+		break;
+	}
+	return text;
+}
 
 class prepared_clock {
 public:

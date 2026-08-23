@@ -173,38 +173,55 @@ double solve_point_size(const std::array<ink_extents, 10> &digits, const double 
 	return reference_point_size * target_height / reference_height;
 }
 
-row_extents date_reference_extents(const row_style &row)
+row_extents date_reference_extents(const row_style &row, const date_format format)
 {
-	std::string widest_date;
+	row_extents max_extents;
+	int widest_month = 0;
+	int widest_day = 0;
+
 	double widest = 0;
 	for (int month = 1; month <= 12; ++month) {
 		for (int day = 1; day <= 31; ++day) {
-			char text[16];
-			std::snprintf(text, sizeof text, "%d/%d %s", month, day, weekday_names[0]);
-
-			CFPtr<CTLineRef> line = make_line(text, row);
+			CFPtr<CTLineRef> line = make_line(format_date(format, month, day, 0), row);
 			if (!line) {
 				return {};
 			}
 			const double width = measure(line.get()).width;
+			max_extents.width = std::max(max_extents.width, width);
 			if (width > widest) {
 				widest = width;
-				widest_date = std::to_string(month) + "/" + std::to_string(day);
+				widest_month = month;
+				widest_day = day;
 			}
 		}
 	}
-	if (widest_date.empty()) {
+	if (widest_month == 0) {
 		return {};
 	}
 
-	row_extents max_extents;
-	for (const char *weekday : weekday_names) {
-		CFPtr<CTLineRef> line = make_line(widest_date + " " + weekday, row);
+	for (int weekday = 1; weekday < 7; ++weekday) {
+		CFPtr<CTLineRef> line = make_line(format_date(format, widest_month, widest_day, weekday), row);
 		if (!line) {
 			return {};
 		}
-		max_extents.extend(measure(line.get()));
+		max_extents.width = std::max(max_extents.width, measure(line.get()).width);
 	}
+
+	std::string height_glyphs = "0123456789";
+	for (const char *weekday : weekday_names) {
+		height_glyphs += weekday;
+	}
+	for (const char *month : month_names) {
+		height_glyphs += month;
+	}
+
+	CFPtr<CTLineRef> line = make_line(height_glyphs, row);
+	if (!line) {
+		return {};
+	}
+	const ink_extents extents = measure(line.get());
+	max_extents.ascent = extents.ascent;
+	max_extents.descent = extents.descent;
 	return max_extents;
 }
 
@@ -336,7 +353,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	row_extents date_extents = date_reference_extents({.font = date_font.get()});
+	row_extents date_extents = date_reference_extents({.font = date_font.get()}, style.format);
 	row_extents time_extents = time_reference_extents({.font = time_font.get()});
 	if (date_extents.width <= 0 || time_extents.width <= 0) {
 		return nullptr;
