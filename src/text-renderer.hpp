@@ -28,11 +28,13 @@ struct clock_style {
 	std::string font_style;
 	double size = 50;
 	std::uint32_t color = 0xffffffff;
+	double colon_offset_ratio = 0;
 
 	double date_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
 	double date_and_time_spacing() const noexcept { return size * 0.24; }
 	double margin() const noexcept { return size * 0.32; }
+	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 };
 
 struct rendered_text {
@@ -64,3 +66,4 @@ protected:
 };
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style);
+double suggest_colon_offset_ratio(const clock_style &style);
