@@ -33,6 +33,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 #include <utility>
 
+namespace settings {
+constexpr const char *size = "size";
+constexpr const char *color = "color";
+} // namespace settings
+
 struct clock_source {
 	obs_source_t *src;
 
@@ -115,8 +120,10 @@ static void clock_source_rebuild_texture(clock_source *context)
 void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
-	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, "color"));
-	context->clock = prepare_clock({.font_face = "Tsukushi A Round Gothic", .font_style = "Bold", .color = color});
+	auto size = static_cast<double>(obs_data_get_int(settings, settings::size));
+	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color));
+	context->clock = prepare_clock(
+		{.font_face = "Tsukushi A Round Gothic", .font_style = "Bold", .size = size, .color = color});
 
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
@@ -153,8 +160,8 @@ std::uint32_t clock_source_get_height(void *data)
 
 void clock_source_get_defaults(obs_data_t *settings)
 {
-	obs_data_set_default_string(settings, "text", "12:34");
-	obs_data_set_default_int(settings, "color", 0xFFFFFFFF);
+	obs_data_set_default_int(settings, settings::size, 50);
+	obs_data_set_default_int(settings, settings::color, 0xFFFFFFFF);
 }
 
 void clock_source_video_tick(void *data, float)
@@ -194,7 +201,8 @@ void clock_source_render(void *data, gs_effect *)
 obs_properties_t *clock_source_get_properties(void *)
 {
 	obs_properties_t *props = obs_properties_create();
-	obs_properties_add_color(props, "color", obs_module_text("ClockSource.Color"));
+	obs_properties_add_int_slider(props, settings::size, obs_module_text("ClockSource.Size"), 20, 200, 1);
+	obs_properties_add_color(props, settings::color, obs_module_text("ClockSource.Color"));
 	return props;
 }
 

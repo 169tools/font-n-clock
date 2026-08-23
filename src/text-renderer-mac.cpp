@@ -53,7 +53,6 @@ struct row_style {
 };
 
 constexpr double reference_point_size = 100;
-constexpr double date_and_time_spacing = 12;
 
 CFPtr<CFStringRef> make_cfstring(const std::string &value)
 {
@@ -279,8 +278,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	const std::array<ink_extents, 10> probe_digits = digit_extents({.font = probe.get()});
 
-	const double date_point_size = solve_point_size(probe_digits, style.date_ink_height);
-	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height);
+	const double date_point_size = solve_point_size(probe_digits, style.date_ink_height());
+	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
 	if (date_point_size <= 0 || time_point_size <= 0) {
 		return nullptr;
 	}
@@ -298,13 +297,14 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	if (date_extents.width <= 0 || time_extents.width <= 0) {
 		return nullptr;
 	}
-	const double reference_width = std::max(date_extents.width, time_extents.width);
+	const double reference_width = std::max(date_extents.width, time_extents.width) + style.margin() * 2;
 	const double time_baseline_y = time_extents.descent;
 	const double date_baseline_y =
-		time_baseline_y + time_extents.ascent + date_and_time_spacing + date_extents.descent;
-	const double reference_height = date_baseline_y + date_extents.ascent;
+		time_baseline_y + time_extents.ascent + style.date_and_time_spacing() + date_extents.descent;
+	const double reference_height = date_baseline_y + date_extents.ascent + style.margin() * 2;
 
 	auto clock = std::make_unique<mac_clock>();
+
 	clock->date_font = std::move(date_font);
 	clock->time_font = std::move(time_font);
 	clock->color = std::move(color);
@@ -313,8 +313,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
 		.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
 		.reference_width = reference_width,
-		.date_baseline_y = date_baseline_y,
-		.time_baseline_y = time_baseline_y,
+		.date_baseline_y = date_baseline_y + style.margin(),
+		.time_baseline_y = time_baseline_y + style.margin(),
 	};
 	return clock;
 }
