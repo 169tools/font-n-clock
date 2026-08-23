@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <memory>
 #include <obs.h>
@@ -35,6 +36,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <utility>
 
 namespace settings {
+constexpr const char *date_format_name = "date_format";
 constexpr const char *size_name = "size";
 constexpr const char *color_name = "color";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
@@ -47,6 +49,7 @@ struct clock_source {
 
 	std::unique_ptr<prepared_clock> clock;
 
+	date_format format = date_format::month_day_weekday;
 	clock_content content;
 	std::time_t last_read = 0;
 
@@ -55,12 +58,28 @@ struct clock_source {
 	std::uint32_t tex_height = 0;
 };
 
+struct date_format_option {
+	date_format value;
+	const char *id;
+};
+
+constexpr date_format_option date_format_options[] = {
+	{date_format::month_day_weekday, "month_day_weekday"},
+	{date_format::day_month_weekday, "day_month_weekday"},
+	{date_format::month_name_day, "month_name_day"},
+	{date_format::day_month_name, "day_month_name"},
+};
+
+constexpr int sample_month = 1;
+constexpr int sample_day = 23;
+constexpr int sample_weekday = 5;
+
 const char *clock_source_get_name(void *)
 {
 	return obs_module_text("ClockSource");
 }
 
-clock_content read_clock(std::time_t now)
+clock_content read_clock(std::time_t now, const date_format format)
 {
 	std::tm local = {};
 #ifdef _WIN32
@@ -72,14 +91,11 @@ clock_content read_clock(std::time_t now)
 	const int day = std::clamp(local.tm_mday, 1, 31);
 	const int hour = std::clamp(local.tm_hour, 0, 23);
 	const int minute = std::clamp(local.tm_min, 0, 59);
-	const char *weekday = weekday_names[std::clamp(local.tm_wday, 0, 6)];
+	const int weekday = std::clamp(local.tm_wday, 0, 6);
 
-	char date_text[10];
 	char time_text[6];
-	std::snprintf(date_text, sizeof date_text, "%d/%d %s", month, day, weekday);
 	std::snprintf(time_text, sizeof time_text, "%d:%02d", hour, minute);
-
-	return {.date = date_text, .time = time_text};
+	return {.date = format_date(format, month, day, weekday), .time = time_text};
 }
 
 bool refresh_content(clock_source *context)
@@ -90,7 +106,7 @@ bool refresh_content(clock_source *context)
 	}
 	context->last_read = now;
 
-	clock_content content = read_clock(now);
+	clock_content content = read_clock(now, context->format);
 	if (content.date == context->content.date && content.time == context->content.time) {
 		return false;
 	}
@@ -121,9 +137,21 @@ static void clock_source_rebuild_texture(clock_source *context)
 	obs_leave_graphics();
 }
 
+date_format read_date_format(obs_data_t *settings)
+{
+	const char *stored = obs_data_get_string(settings, settings::date_format_name);
+	for (const date_format_option &option : date_format_options) {
+		if (std::strcmp(option.id, stored) == 0) {
+			return option.value;
+		}
+	}
+	return date_format_options[0].value;
+}
+
 void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
+	date_format format = read_date_format(settings);
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
 	const std::string font_face = "Tsukushi A Round Gothic";
@@ -139,12 +167,15 @@ void clock_source_update(void *data, obs_data_t *settings)
 	}
 	auto colon_offset_percent =
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
-	context->clock = prepare_clock({.font_face = font_face,
+	context->clock = prepare_clock({.format = format,
+					.font_face = font_face,
 					.font_style = font_style,
 					.size = size,
 					.color = color,
 					.colon_offset_ratio = colon_offset_percent / 100});
 
+	context->format = format;
+	context->last_read = 0;
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
 }
@@ -180,6 +211,7 @@ std::uint32_t clock_source_get_height(void *data)
 
 void clock_source_get_defaults(obs_data_t *settings)
 {
+	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_int(settings, settings::size_name, 50);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
@@ -222,6 +254,15 @@ void clock_source_render(void *data, gs_effect *)
 obs_properties_t *clock_source_get_properties(void *)
 {
 	obs_properties_t *props = obs_properties_create();
+
+	obs_property_t *list = obs_properties_add_list(props, settings::date_format_name,
+						       obs_module_text("ClockSource.DateFormat"), OBS_COMBO_TYPE_LIST,
+						       OBS_COMBO_FORMAT_STRING);
+	for (const date_format_option &option : date_format_options) {
+		obs_property_list_add_string(
+			list, format_date(option.value, sample_month, sample_day, sample_weekday).c_str(), option.id);
+	}
+
 	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
 	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
 	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
