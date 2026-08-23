@@ -1,5 +1,5 @@
 /*
-font-meets-clock
+Font-n-Clock
 Copyright (C) 2026 mizznoff <mizznoff@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -272,7 +272,7 @@ obs_properties_t *clock_source_get_properties(void *)
 }
 
 obs_source_info info = {
-	.id = "font-meets-clock",
+	.id = "font-n-clock",
 	.type = OBS_SOURCE_TYPE_INPUT,
 	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW | OBS_SOURCE_SRGB,
 	.get_name = clock_source_get_name,
@@ -285,7 +285,7 @@ obs_source_info info = {
 	.update = clock_source_update,
 	.video_tick = clock_source_video_tick,
 	.video_render = clock_source_render,
-	.icon_type = OBS_ICON_TYPE_COLOR,
+	.icon_type = OBS_ICON_TYPE_TEXT,
 };
 
 void register_clock_source()
