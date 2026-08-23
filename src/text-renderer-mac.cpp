@@ -186,10 +186,10 @@ row_extents date_reference_extents(const row_style &row, const date_format forma
 			if (!line) {
 				return {};
 			}
-			const ink_extents extents = measure(line.get());
-			max_extents.width = std::max(max_extents.width, measure(line.get()).width);
-			if (extents.width > widest) {
-				widest = extents.width;
+			const double width = measure(line.get()).width;
+			max_extents.width = std::max(max_extents.width, width);
+			if (width > widest) {
+				widest = width;
 				widest_month = month;
 				widest_day = day;
 			}
