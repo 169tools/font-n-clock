@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "text-renderer.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <memory>
@@ -34,9 +35,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <utility>
 
 namespace settings {
-constexpr const char *size = "size";
-constexpr const char *color = "color";
-constexpr const char *colon_offset_percent = "colon_offset_percent";
+constexpr const char *size_name = "size";
+constexpr const char *color_name = "color";
+constexpr const char *colon_offset_percent_name = "colon_offset_percent";
+constexpr const int colon_offset_percent_min = -5;
+constexpr const int colon_offset_percent_max = 20;
 } // namespace settings
 
 struct clock_source {
@@ -121,18 +124,21 @@ static void clock_source_rebuild_texture(clock_source *context)
 void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
-	auto size = static_cast<double>(obs_data_get_int(settings, settings::size));
-	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color));
+	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
+	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
 	const std::string font_face = "Tsukushi A Round Gothic";
 	const std::string font_style = "Bold";
 
-	if (!obs_data_has_user_value(settings, settings::colon_offset_percent)) {
+	if (!obs_data_has_user_value(settings, settings::colon_offset_percent_name)) {
 		const double suggested_colon_offset_ratio =
 			suggest_colon_offset_ratio({.font_face = font_face, .font_style = font_style});
-		obs_data_set_double(settings, settings::colon_offset_percent,
-				    static_cast<std::uint32_t>(suggested_colon_offset_ratio * 100));
+		const int clamped_percent =
+			std::clamp(static_cast<int>(std::lround(suggested_colon_offset_ratio * 100)),
+				   settings::colon_offset_percent_min, settings::colon_offset_percent_max);
+		obs_data_set_int(settings, settings::colon_offset_percent_name, clamped_percent);
 	}
-	auto colon_offset_percent = static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent));
+	auto colon_offset_percent =
+		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 	context->clock = prepare_clock({.font_face = font_face,
 					.font_style = font_style,
 					.size = size,
@@ -174,9 +180,9 @@ std::uint32_t clock_source_get_height(void *data)
 
 void clock_source_get_defaults(obs_data_t *settings)
 {
-	obs_data_set_default_int(settings, settings::size, 50);
-	obs_data_set_default_int(settings, settings::color, 0xFFFFFFFF);
-	obs_data_set_default_int(settings, settings::colon_offset_percent, 0);
+	obs_data_set_default_int(settings, settings::size_name, 50);
+	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
+	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
 }
 
 void clock_source_video_tick(void *data, float)
@@ -216,10 +222,11 @@ void clock_source_render(void *data, gs_effect *)
 obs_properties_t *clock_source_get_properties(void *)
 {
 	obs_properties_t *props = obs_properties_create();
-	obs_properties_add_int_slider(props, settings::size, obs_module_text("ClockSource.Size"), 20, 200, 1);
-	obs_properties_add_color(props, settings::color, obs_module_text("ClockSource.Color"));
-	obs_properties_add_int_slider(props, settings::colon_offset_percent,
-				      obs_module_text("ClockSource.ColonOffsetPercent"), -5, 20, 1);
+	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
+	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
+	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
+				      obs_module_text("ClockSource.ColonOffsetPercent"),
+				      settings::colon_offset_percent_min, settings::colon_offset_percent_max, 1);
 	return props;
 }
 

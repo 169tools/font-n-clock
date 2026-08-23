@@ -25,7 +25,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &)
 	return nullptr;
 }
 
-double suggest_colon_offset_ratio(const clock_style &style)
+double suggest_colon_offset_ratio(const clock_style &)
 {
 	return 0;
 }
