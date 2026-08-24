@@ -38,7 +38,7 @@ struct clock_style {
 	std::string font_style;
 	double size = 50;
 	std::uint32_t color = 0xffffffff;
-	bool shadow = true;
+	bool shadow = false;
 	double colon_offset_ratio = 0;
 
 	double date_ink_height() const noexcept { return size * 0.4; }
