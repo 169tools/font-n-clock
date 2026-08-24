@@ -48,9 +48,9 @@ constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
 #ifdef _WIN32
-constexpr const char *default_font_face = "Grandview";
+constexpr const char *default_font_face = "Calibri";
 #elif defined(__APPLE__)
-constexpr const char *default_font_face = "DIN Alternate";
+constexpr const char *default_font_face = "Optima";
 #else
 constexpr const char *default_font_face = "Sans Serif";
 #endif
@@ -62,9 +62,6 @@ struct clock_source {
 	std::unique_ptr<prepared_clock> clock;
 
 	date_format format = date_format::month_day_weekday;
-	std::string font_face;
-	std::string font_style;
-
 	clock_content content;
 	std::time_t last_read = 0;
 
@@ -163,7 +160,7 @@ date_format read_date_format(obs_data_t *settings)
 	return date_format_options[0].value;
 }
 
-int suggested_colon_offset_percent(const std::string font_face, const std::string font_style)
+int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style)
 {
 	const double suggested_colon_offset_ratio =
 		suggest_colon_offset_ratio({.font_face = font_face, .font_style = font_style});
@@ -272,8 +269,8 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 
 	obs_data_t *settings = obs_source_get_settings(context->source);
 
-	// TODO: select font
-	const char *font_face = "DIN Alternate";
+	// TODO: フォント選択ダイアログを表示する
+	const char *font_face = "Optima";
 	const char *font_style = "Bold";
 	obs_data_set_string(settings, settings::font_face_name, font_face);
 	obs_data_set_string(settings, settings::font_style_name, font_style);
