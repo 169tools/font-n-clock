@@ -32,6 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreGraphics/CGColorSpace.h>
 #include <CoreGraphics/CGContext.h>
 #include <CoreGraphics/CGFont.h>
+#include <CoreGraphics/CGGeometry.h>
 #include <CoreGraphics/CGImage.h>
 #include <CoreText/CTRun.h>
 #include <CoreText/CTFont.h>
@@ -47,6 +48,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdio>
 #include <ctime>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -128,6 +130,16 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 		return nullptr;
 	}
 	return CFPtr<CTLineRef>(CTLineCreateWithAttributedString(attributed.get()));
+}
+
+CFPtr<CGColorRef> make_shadow_color(const double shadow_opacity)
+{
+	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
+	if (!space) {
+		return nullptr;
+	}
+	const CGFloat components[] = {0, 0, 0, shadow_opacity};
+	return CFPtr<CGColorRef>(CGColorCreate(space.get(), components));
 }
 
 ink_extents measure(CTLineRef line)
@@ -293,6 +305,8 @@ public:
 	CFPtr<CTFontRef> date_font;
 	CFPtr<CTFontRef> time_font;
 	CFPtr<CGColorRef> color;
+	std::optional<shadow_style> shadow;
+	CFPtr<CGColorRef> shadow_color;
 	CFPtr<CGColorSpaceRef> space;
 	clock_frame frame;
 
@@ -321,6 +335,11 @@ public:
 		CGContextSetShouldSmoothFonts(context.get(), false);
 		CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
 		CGContextSetFillColorWithColor(context.get(), color.get());
+
+		if (shadow) {
+			CGContextSetShadowWithColor(context.get(), CGSizeMake(0, -shadow->offset), shadow->blur,
+						    shadow_color.get());
+		}
 
 		draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
 		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y,
@@ -366,6 +385,15 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		date_baseline_y + date_extents.ascent + style.top_margin() + style.bottom_margin();
 
 	auto clock = std::make_unique<mac_clock>();
+
+	if (style.shadow) {
+		CFPtr<CGColorRef> shadow_color = make_shadow_color(shadow_style::opacity);
+		if (!shadow_color) {
+			return nullptr;
+		}
+		clock->shadow = shadow_style{.offset = style.shadow_offset_px(), .blur = style.shadow_blur_px()};
+		clock->shadow_color = std::move(shadow_color);
+	}
 
 	clock->date_font = std::move(date_font);
 	clock->time_font = std::move(time_font);

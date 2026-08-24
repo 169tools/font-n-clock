@@ -65,3 +65,9 @@ struct clock_frame {
 	double time_baseline_y = 0;
 	double colon_offset_px = 0;
 };
+
+struct shadow_style {
+	static constexpr double opacity = 0.5;
+	double offset = 0;
+	double blur = 0;
+};

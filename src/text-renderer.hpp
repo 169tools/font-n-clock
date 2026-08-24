@@ -48,6 +48,8 @@ struct clock_style {
 	double bottom_margin() const noexcept { return size * 0.4; }
 	double horizontal_margin() const noexcept { return size * 0.38; }
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
+	double shadow_offset_px() const noexcept { return time_ink_height() * 0.02; }
+	double shadow_blur_px() const noexcept { return time_ink_height() * 0.1; }
 };
 
 struct rendered_text {

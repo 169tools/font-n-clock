@@ -239,21 +239,9 @@ void clock_source_render(void *data, gs_effect *)
 	}
 
 	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);
-	gs_technique_t *tech = gs_effect_get_technique(effect, "Draw");
-
-	const bool previous = gs_framebuffer_srgb_enabled();
-	gs_enable_framebuffer_srgb(true);
-
-	gs_technique_begin(tech);
-	gs_technique_begin_pass(tech, 0);
-
-	gs_effect_set_texture_srgb(gs_effect_get_param_by_name(effect, "image"), context->tex);
-	gs_draw_sprite(0, 0, context->tex_width, context->tex_height);
-
-	gs_technique_end_pass(tech);
-	gs_technique_end(tech);
-
-	gs_enable_framebuffer_srgb(previous);
+	while (gs_effect_loop(effect, "Draw")) {
+		obs_source_draw(context->tex, 0, 0, 0, 0, false);
+	}
 }
 
 obs_properties_t *clock_source_get_properties(void *)
@@ -280,7 +268,7 @@ obs_properties_t *clock_source_get_properties(void *)
 obs_source_info info = {
 	.id = "font-n-clock",
 	.type = OBS_SOURCE_TYPE_INPUT,
-	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW | OBS_SOURCE_SRGB,
+	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW,
 	.get_name = clock_source_get_name,
 	.create = clock_source_create,
 	.destroy = clock_source_destroy,
