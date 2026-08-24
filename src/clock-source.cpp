@@ -47,13 +47,12 @@ constexpr const char *shadow_name = "shadow";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
-#ifdef _WIN32
-constexpr const char *default_font_face = "Calibri";
-#elif defined(__APPLE__)
-constexpr const char *default_font_face = "Optima";
+#if defined(_WIN32) || defined(__APPLE__)
+constexpr const char *default_font_face = "Impact";
 #else
 constexpr const char *default_font_face = "Sans Serif";
 #endif
+constexpr const char *default_font_style = "Regular";
 } // namespace settings
 
 struct clock_source {
@@ -233,7 +232,7 @@ std::uint32_t clock_source_get_height(void *data)
 void clock_source_get_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
-	obs_data_set_default_string(settings, settings::font_style_name, "Bold");
+	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
 	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_int(settings, settings::size_name, 50);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
@@ -270,8 +269,8 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	obs_data_t *settings = obs_source_get_settings(context->source);
 
 	// TODO: フォント選択ダイアログを表示する
-	const char *font_face = "Optima";
-	const char *font_style = "Bold";
+	const char *font_face = settings::default_font_face;
+	const char *font_style = settings::default_font_style;
 	obs_data_set_string(settings, settings::font_face_name, font_face);
 	obs_data_set_string(settings, settings::font_style_name, font_style);
 
