@@ -39,6 +39,7 @@ namespace settings {
 constexpr const char *date_format_name = "date_format";
 constexpr const char *size_name = "size";
 constexpr const char *color_name = "color";
+constexpr const char *shadow_name = "shadow";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const int colon_offset_percent_min = -5;
 constexpr const int colon_offset_percent_max = 20;
@@ -154,6 +155,8 @@ void clock_source_update(void *data, obs_data_t *settings)
 	date_format format = read_date_format(settings);
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
+	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
+
 	const std::string font_face = "Tsukushi A Round Gothic";
 	const std::string font_style = "Bold";
 
@@ -172,6 +175,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 					.font_style = font_style,
 					.size = size,
 					.color = color,
+					.shadow = shadow,
 					.colon_offset_ratio = colon_offset_percent / 100});
 
 	context->format = format;
@@ -214,6 +218,7 @@ void clock_source_get_defaults(obs_data_t *settings)
 	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_int(settings, settings::size_name, 50);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
+	obs_data_set_default_bool(settings, settings::shadow_name, false);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
 }
 
@@ -234,21 +239,9 @@ void clock_source_render(void *data, gs_effect *)
 	}
 
 	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);
-	gs_technique_t *tech = gs_effect_get_technique(effect, "Draw");
-
-	const bool previous = gs_framebuffer_srgb_enabled();
-	gs_enable_framebuffer_srgb(true);
-
-	gs_technique_begin(tech);
-	gs_technique_begin_pass(tech, 0);
-
-	gs_effect_set_texture_srgb(gs_effect_get_param_by_name(effect, "image"), context->tex);
-	gs_draw_sprite(0, 0, context->tex_width, context->tex_height);
-
-	gs_technique_end_pass(tech);
-	gs_technique_end(tech);
-
-	gs_enable_framebuffer_srgb(previous);
+	while (gs_effect_loop(effect, "Draw")) {
+		obs_source_draw(context->tex, 0, 0, 0, 0, false);
+	}
 }
 
 obs_properties_t *clock_source_get_properties(void *)
@@ -265,6 +258,7 @@ obs_properties_t *clock_source_get_properties(void *)
 
 	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
 	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
+	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
 				      obs_module_text("ClockSource.ColonOffsetPercent"),
 				      settings::colon_offset_percent_min, settings::colon_offset_percent_max, 1);
@@ -274,7 +268,7 @@ obs_properties_t *clock_source_get_properties(void *)
 obs_source_info info = {
 	.id = "font-n-clock",
 	.type = OBS_SOURCE_TYPE_INPUT,
-	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW | OBS_SOURCE_SRGB,
+	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW,
 	.get_name = clock_source_get_name,
 	.create = clock_source_create,
 	.destroy = clock_source_destroy,

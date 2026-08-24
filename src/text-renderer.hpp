@@ -38,6 +38,7 @@ struct clock_style {
 	std::string font_style;
 	double size = 50;
 	std::uint32_t color = 0xffffffff;
+	bool shadow = false;
 	double colon_offset_ratio = 0;
 
 	double date_ink_height() const noexcept { return size * 0.4; }
@@ -47,6 +48,8 @@ struct clock_style {
 	double bottom_margin() const noexcept { return size * 0.4; }
 	double horizontal_margin() const noexcept { return size * 0.38; }
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
+	double shadow_offset_px() const noexcept { return time_ink_height() * 0.02; }
+	double shadow_blur_px() const noexcept { return time_ink_height() * 0.1; }
 };
 
 struct rendered_text {
