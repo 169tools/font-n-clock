@@ -22,7 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <limits>
 
-inline constexpr double colon_optional_offset_ratio = 0.015;
+inline constexpr double colon_optional_offset_ratio = 0.02;
 inline constexpr double negative_infinity = -std::numeric_limits<double>::infinity();
 
 struct ink_extents {

@@ -37,16 +37,27 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace settings {
 constexpr const char *date_format_name = "date_format";
+constexpr const char *font_display_name = "font_display";
+constexpr const char *select_font_name = "select_font";
+constexpr const char *font_face_name = "font_face";
+constexpr const char *font_style_name = "font_style";
 constexpr const char *size_name = "size";
 constexpr const char *color_name = "color";
 constexpr const char *shadow_name = "shadow";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
-constexpr const int colon_offset_percent_min = -5;
-constexpr const int colon_offset_percent_max = 20;
+constexpr const int colon_offset_percent_min = -10;
+constexpr const int colon_offset_percent_max = 50;
+#ifdef _WIN32
+constexpr const char *default_font_face = "Calibri";
+#elif defined(__APPLE__)
+constexpr const char *default_font_face = "Optima";
+#else
+constexpr const char *default_font_face = "Sans Serif";
+#endif
 } // namespace settings
 
 struct clock_source {
-	obs_source_t *src;
+	obs_source_t *source;
 
 	std::unique_ptr<prepared_clock> clock;
 
@@ -54,9 +65,9 @@ struct clock_source {
 	clock_content content;
 	std::time_t last_read = 0;
 
-	gs_texture_t *tex = nullptr;
-	std::uint32_t tex_width = 0;
-	std::uint32_t tex_height = 0;
+	gs_texture_t *texture = nullptr;
+	std::uint32_t texture_width = 0;
+	std::uint32_t texture_height = 0;
 };
 
 struct date_format_option {
@@ -125,15 +136,15 @@ static void clock_source_rebuild_texture(clock_source *context)
 	const std::uint8_t *rows = bitmap.pixels.data();
 
 	obs_enter_graphics();
-	if (context->tex && context->tex_width == bitmap.width && context->tex_height == bitmap.height) {
-		gs_texture_set_image(context->tex, rows, bitmap.width * 4, false);
+	if (context->texture && context->texture_width == bitmap.width && context->texture_height == bitmap.height) {
+		gs_texture_set_image(context->texture, rows, bitmap.width * 4, false);
 	} else {
-		if (context->tex) {
-			gs_texture_destroy(context->tex);
+		if (context->texture) {
+			gs_texture_destroy(context->texture);
 		}
-		context->tex = gs_texture_create(bitmap.width, bitmap.height, GS_RGBA, 1, &rows, GS_DYNAMIC);
-		context->tex_width = bitmap.width;
-		context->tex_height = bitmap.height;
+		context->texture = gs_texture_create(bitmap.width, bitmap.height, GS_RGBA, 1, &rows, GS_DYNAMIC);
+		context->texture_width = bitmap.width;
+		context->texture_height = bitmap.height;
 	}
 	obs_leave_graphics();
 }
@@ -149,24 +160,30 @@ date_format read_date_format(obs_data_t *settings)
 	return date_format_options[0].value;
 }
 
+int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style)
+{
+	const double suggested_colon_offset_ratio =
+		suggest_colon_offset_ratio({.font_face = font_face, .font_style = font_style});
+	return std::clamp(static_cast<int>(std::lround(suggested_colon_offset_ratio * 100)),
+			  settings::colon_offset_percent_min, settings::colon_offset_percent_max);
+}
+
 void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
 	date_format format = read_date_format(settings);
+	auto font_face = static_cast<std::string>(obs_data_get_string(settings, settings::font_face_name));
+	auto font_style = static_cast<std::string>(obs_data_get_string(settings, settings::font_style_name));
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
 
-	const std::string font_face = "Tsukushi A Round Gothic";
-	const std::string font_style = "Bold";
+	const std::string font_display = font_style.empty() ? font_face : font_face + " " + font_style;
+	obs_data_set_string(settings, settings::font_display_name, font_display.c_str());
 
 	if (!obs_data_has_user_value(settings, settings::colon_offset_percent_name)) {
-		const double suggested_colon_offset_ratio =
-			suggest_colon_offset_ratio({.font_face = font_face, .font_style = font_style});
-		const int clamped_percent =
-			std::clamp(static_cast<int>(std::lround(suggested_colon_offset_ratio * 100)),
-				   settings::colon_offset_percent_min, settings::colon_offset_percent_max);
-		obs_data_set_int(settings, settings::colon_offset_percent_name, clamped_percent);
+		const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
+		obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
 	}
 	auto colon_offset_percent =
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
@@ -187,7 +204,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 {
 	clock_source *context = new clock_source();
-	context->src = source;
+	context->source = source;
 	clock_source_update(context, settings);
 	return context;
 }
@@ -195,9 +212,9 @@ void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 void clock_source_destroy(void *data)
 {
 	auto *context = static_cast<clock_source *>(data);
-	if (context->tex) {
+	if (context->texture) {
 		obs_enter_graphics();
-		gs_texture_destroy(context->tex);
+		gs_texture_destroy(context->texture);
 		obs_leave_graphics();
 	}
 	delete context;
@@ -205,21 +222,23 @@ void clock_source_destroy(void *data)
 
 std::uint32_t clock_source_get_width(void *data)
 {
-	return static_cast<clock_source *>(data)->tex_width;
+	return static_cast<clock_source *>(data)->texture_width;
 }
 
 std::uint32_t clock_source_get_height(void *data)
 {
-	return static_cast<clock_source *>(data)->tex_height;
+	return static_cast<clock_source *>(data)->texture_height;
 }
 
 void clock_source_get_defaults(obs_data_t *settings)
 {
+	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
+	obs_data_set_default_string(settings, settings::font_style_name, "Bold");
 	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_int(settings, settings::size_name, 50);
+	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
 	obs_data_set_default_bool(settings, settings::shadow_name, false);
-	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
 }
 
 void clock_source_video_tick(void *data, float)
@@ -234,19 +253,45 @@ void clock_source_video_tick(void *data, float)
 void clock_source_render(void *data, gs_effect *)
 {
 	auto *context = static_cast<clock_source *>(data);
-	if (!context->tex) {
+	if (!context->texture) {
 		return;
 	}
 
 	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);
 	while (gs_effect_loop(effect, "Draw")) {
-		obs_source_draw(context->tex, 0, 0, 0, 0, false);
+		obs_source_draw(context->texture, 0, 0, 0, 0, false);
 	}
 }
 
-obs_properties_t *clock_source_get_properties(void *)
+bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
+{
+	auto *context = static_cast<clock_source *>(data);
+
+	obs_data_t *settings = obs_source_get_settings(context->source);
+
+	// TODO: フォント選択ダイアログを表示する
+	const char *font_face = "Optima";
+	const char *font_style = "Bold";
+	obs_data_set_string(settings, settings::font_face_name, font_face);
+	obs_data_set_string(settings, settings::font_style_name, font_style);
+
+	const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
+	obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
+
+	obs_source_update(context->source, settings);
+	obs_data_release(settings);
+
+	return true;
+}
+
+obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
+
+	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.FontDisplay"),
+				OBS_TEXT_INFO);
+	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
+				   clock_source_select_font, data);
 
 	obs_property_t *list = obs_properties_add_list(props, settings::date_format_name,
 						       obs_module_text("ClockSource.DateFormat"), OBS_COMBO_TYPE_LIST,
@@ -257,11 +302,11 @@ obs_properties_t *clock_source_get_properties(void *)
 	}
 
 	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
-	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
-	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
 				      obs_module_text("ClockSource.ColonOffsetPercent"),
 				      settings::colon_offset_percent_min, settings::colon_offset_percent_max, 1);
+	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
+	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	return props;
 }
 
