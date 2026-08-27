@@ -232,9 +232,9 @@ std::uint32_t clock_source_get_height(void *data)
 
 void clock_source_get_defaults(obs_data_t *settings)
 {
+	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
 	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
-	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_int(settings, settings::size_name, 50);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
@@ -292,10 +292,6 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
-	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
-	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
-				   clock_source_select_font, data);
-
 	obs_property_t *list = obs_properties_add_list(props, settings::date_format_name,
 						       obs_module_text("ClockSource.DateFormat"), OBS_COMBO_TYPE_LIST,
 						       OBS_COMBO_FORMAT_STRING);
@@ -303,6 +299,10 @@ obs_properties_t *clock_source_get_properties(void *data)
 		obs_property_list_add_string(
 			list, format_date(option.value, sample_month, sample_day, sample_weekday).c_str(), option.id);
 	}
+
+	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
+	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
+				   clock_source_select_font, data);
 
 	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
 	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
