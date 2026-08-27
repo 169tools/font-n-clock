@@ -16,22 +16,23 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include "font-dialog.hpp"
 #include "text-renderer.hpp"
+
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <graphics/graphics.h>
+#include <graphics/vec4.h>
 #include <memory>
-#include <obs.h>
 #include <obs-data.h>
 #include <obs-module.h>
 #include <obs-properties.h>
 #include <obs-source.h>
-
-#include <cstdint>
-#include <graphics/graphics.h>
-#include <graphics/vec4.h>
+#include <obs.h>
 #include <string>
 #include <utility>
 
@@ -57,9 +58,10 @@ constexpr const char *default_font_style = "Regular";
 
 struct clock_source {
 	obs_source_t *source;
-
 	std::unique_ptr<prepared_clock> clock;
 
+	std::string font_face;
+	std::string font_style;
 	date_format format = date_format::month_day_weekday;
 	clock_content content;
 	std::time_t last_read = 0;
@@ -80,10 +82,6 @@ constexpr date_format_option date_format_options[] = {
 	{date_format::month_name_day, "month_name_day"},
 	{date_format::day_month_name, "day_month_name"},
 };
-
-constexpr int sample_month = 1;
-constexpr int sample_day = 23;
-constexpr int sample_weekday = 5;
 
 const char *clock_source_get_name(void *)
 {
@@ -267,12 +265,14 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	auto *context = static_cast<clock_source *>(data);
 
 	obs_data_t *settings = obs_source_get_settings(context->source);
+	std::string font_face = obs_data_get_string(settings, settings::font_face_name);
+	std::string font_style = obs_data_get_string(settings, settings::font_style_name);
+	if (!select_font(font_face, font_style, context->format)) {
+		return false;
+	}
 
-	// TODO: フォント選択ダイアログを表示する
-	const char *font_face = settings::default_font_face;
-	const char *font_style = settings::default_font_style;
-	obs_data_set_string(settings, settings::font_face_name, font_face);
-	obs_data_set_string(settings, settings::font_style_name, font_style);
+	obs_data_set_string(settings, settings::font_face_name, font_face.c_str());
+	obs_data_set_string(settings, settings::font_style_name, font_style.c_str());
 
 	const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
 	obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);

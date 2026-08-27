@@ -24,6 +24,11 @@ endif()
 
 if(ENABLE_QT)
   find_package(Qt6 COMPONENTS Widgets Core)
+  if(APPLE AND TARGET WrapOpenGL::WrapOpenGL)
+    get_target_property(_wrap_opengl_libraries WrapOpenGL::WrapOpenGL INTERFACE_LINK_LIBRARIES)
+    list(FILTER _wrap_opengl_libraries EXCLUDE REGEX "AGL\\.framework|-framework[ ]+AGL")
+    set_target_properties(WrapOpenGL::WrapOpenGL PROPERTIES INTERFACE_LINK_LIBRARIES "${_wrap_opengl_libraries}")
+  endif()
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
   target_compile_options(
     ${CMAKE_PROJECT_NAME}
@@ -37,7 +42,14 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/plugin-main.cpp src/clock-source.cpp src/clock-source.hpp src/layout.hpp src/text-renderer.hpp
+  PRIVATE
+    src/plugin-main.cpp
+    src/clock-source.cpp
+    src/clock-source.hpp
+    src/font-dialog.cpp
+    src/font-dialog.hpp
+    src/layout.hpp
+    src/text-renderer.hpp
 )
 
 if(APPLE)

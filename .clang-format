@@ -82,7 +82,7 @@ PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Right
 ReflowComments: false
 SkipMacroDefinitionBody: true
-SortIncludes: false
+SortIncludes: CaseSensitive
 SortUsingDeclarations: false
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
