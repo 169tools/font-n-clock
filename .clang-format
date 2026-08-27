@@ -58,7 +58,16 @@ ForEachMacros:
   - "json_object_foreach_safe"
   - "json_array_foreach"
   - "HASH_ITER"
-IncludeBlocks: Preserve
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: "^<(obs|util/|graphics/)"
+    Priority: 1
+  - Regex: '^"'
+    Priority: 2
+  - Regex: "^<Q"
+    Priority: 3
+  - Regex: ".*"
+    Priority: 4
 IndentCaseLabels: false
 IndentPPDirectives: None
 IndentWidth: 8

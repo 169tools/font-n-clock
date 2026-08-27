@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "text-renderer.hpp"
+
 #include <string>
 
 bool select_font(std::string &face, std::string &style, const date_format format);

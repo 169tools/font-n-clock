@@ -16,6 +16,14 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <graphics/graphics.h>
+#include <graphics/vec4.h>
+#include <obs-data.h>
+#include <obs-module.h>
+#include <obs-properties.h>
+#include <obs-source.h>
+#include <obs.h>
+
 #include "font-dialog.hpp"
 #include "text-renderer.hpp"
 
@@ -25,14 +33,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
-#include <graphics/graphics.h>
-#include <graphics/vec4.h>
 #include <memory>
-#include <obs-data.h>
-#include <obs-module.h>
-#include <obs-properties.h>
-#include <obs-source.h>
-#include <obs.h>
 #include <string>
 #include <utility>
 
@@ -268,6 +269,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	std::string font_face = obs_data_get_string(settings, settings::font_face_name);
 	std::string font_style = obs_data_get_string(settings, settings::font_style_name);
 	if (!select_font(font_face, font_style, context->format)) {
+		obs_data_release(settings);
 		return false;
 	}
 
@@ -287,8 +289,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
-	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.FontDisplay"),
-				OBS_TEXT_INFO);
+	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
 	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
 				   clock_source_select_font, data);
 

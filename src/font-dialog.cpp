@@ -17,7 +17,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "font-dialog.hpp"
-#include "qcontainerfwd.h"
+
+#include <obs-frontend-api.h>
+
+#include "obs-module.h"
 #include "text-renderer.hpp"
 
 #include <QDialog>
@@ -35,15 +38,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <Qt>
+#include <QtCore/qcontainerfwd.h>
+#include <QtCore/qobject.h>
+
 #include <memory>
-#include <obs-frontend-api.h>
 #include <string>
 
 constexpr double preview_size = 30;
 
 QPixmap render_preview(const QString &family, const QString &style, const date_format format)
 {
-	clock_style spec{};
+	clock_style spec{.format = format};
 	spec.font_face = family.toStdString();
 	spec.font_style = style.toStdString();
 	spec.size = preview_size;
@@ -81,12 +86,12 @@ bool select_font(std::string &face, std::string &style, const date_format format
 {
 	auto *parent = static_cast<QWidget *>(obs_frontend_get_main_window());
 	QDialog dialog(parent);
-	dialog.setWindowTitle(QStringLiteral("Font"));
+	dialog.setWindowTitle(QString::fromUtf8((obs_module_text("ClockSource.Font"))));
 	dialog.resize(480, 560);
 
 	auto *layout = new QVBoxLayout(&dialog);
 
-	layout->addWidget(new QLabel(QStringLiteral("Font"), &dialog));
+	layout->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.Font")), &dialog));
 
 	auto *families = new QListWidget(&dialog);
 	QStringList available = QFontDatabase::families();
@@ -94,7 +99,7 @@ bool select_font(std::string &face, std::string &style, const date_format format
 	families->addItems(available);
 	layout->addWidget(families, 1);
 
-	layout->addWidget(new QLabel(QStringLiteral("Font style"), &dialog));
+	layout->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.FontStyle")), &dialog));
 
 	auto *lower = new QHBoxLayout;
 	layout->addLayout(lower);
