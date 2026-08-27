@@ -61,8 +61,6 @@ struct clock_source {
 	obs_source_t *source;
 	std::unique_ptr<prepared_clock> clock;
 
-	std::string font_face;
-	std::string font_style;
 	date_format format = date_format::month_day_weekday;
 	clock_content content;
 	std::time_t last_read = 0;
