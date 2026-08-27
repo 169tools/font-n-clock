@@ -27,7 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDialogButtonBox>
 #include <QFontDatabase>
 #include <QFrame>
-#include <QHBoxLayout>
+#include <QGridLayout>
 #include <QImage>
 #include <QLabel>
 #include <QLatin1Char>
@@ -99,18 +99,22 @@ bool select_font(std::string &face, std::string &style, const date_format format
 	families->addItems(available);
 	layout->addWidget(families, 1);
 
-	layout->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.FontStyle")), &dialog));
-
-	auto *lower = new QHBoxLayout;
+	auto *lower = new QGridLayout;
 	layout->addLayout(lower);
 
+	lower->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.FontStyle")), &dialog), 0, 0);
+	lower->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.Preview")), &dialog), 0, 1);
+
 	auto *styles = new QListWidget(&dialog);
-	lower->addWidget(styles, 1);
+	lower->addWidget(styles, 1, 0);
 
 	auto *preview = new QLabel(&dialog);
 	preview->setAlignment(Qt::AlignCenter);
 	preview->setFrameStyle(QFrame::Sunken | QFrame::Panel);
-	lower->addWidget(preview, 1);
+	lower->addWidget(preview, 1, 1);
+
+	lower->setColumnStretch(0, 1);
+	lower->setColumnStretch(1, 1);
 
 	auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
 	layout->addWidget(buttons);
