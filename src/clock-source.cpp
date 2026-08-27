@@ -164,6 +164,11 @@ int suggested_colon_offset_percent(const std::string &font_face, const std::stri
 			  settings::colon_offset_percent_min, settings::colon_offset_percent_max);
 }
 
+std::string font_display_text(const std::string &font_face, const std::string &font_style)
+{
+	return font_style.empty() ? font_face : font_face + " " + font_style;
+}
+
 void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
@@ -174,8 +179,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
 
-	const std::string font_display = font_style.empty() ? font_face : font_face + " " + font_style;
-	obs_data_set_string(settings, settings::font_display_name, font_display.c_str());
+	obs_data_set_string(settings, settings::font_display_name, font_display_text(font_face, font_style).c_str());
 
 	if (!obs_data_has_user_value(settings, settings::colon_offset_percent_name)) {
 		const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
@@ -273,6 +277,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 
 	obs_data_set_string(settings, settings::font_face_name, font_face.c_str());
 	obs_data_set_string(settings, settings::font_style_name, font_style.c_str());
+	obs_data_set_string(settings, settings::font_display_name, font_display_text(font_face, font_style).c_str());
 
 	const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
 	obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
