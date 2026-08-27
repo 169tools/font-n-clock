@@ -16,24 +16,10 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include <obs-module.h>
-#include <util/base.h>
+#pragma once
 
-#include "clock-source.hpp"
-#include "plugin-support.h"
+#include "text-renderer.hpp"
 
-OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
+#include <string>
 
-bool obs_module_load(void)
-{
-	register_clock_source();
-
-	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
-	return true;
-}
-
-void obs_module_unload(void)
-{
-	obs_log(LOG_INFO, "plugin unloaded");
-}
+bool select_font(std::string &face, std::string &style, const date_format format);

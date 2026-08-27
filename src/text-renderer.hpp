@@ -25,6 +25,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 #include <vector>
 
+constexpr int sample_month = 1;
+constexpr int sample_day = 23;
+constexpr int sample_weekday = 5;
+constexpr const char *sample_time = "12:34";
+
 enum class date_format {
 	month_day_weekday, // 12/31 WED
 	day_month_weekday, // 31/12 WED
@@ -33,7 +38,7 @@ enum class date_format {
 };
 
 struct clock_style {
-	date_format format;
+	date_format format = date_format::month_day_weekday;
 	std::string font_face;
 	std::string font_style;
 	double size = 50;
@@ -43,7 +48,7 @@ struct clock_style {
 
 	double date_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
-	double date_and_time_spacing() const noexcept { return size * 0.28; }
+	double date_and_time_spacing() const noexcept { return size * 0.24; }
 	double top_margin() const noexcept { return size * 0.36; }
 	double bottom_margin() const noexcept { return size * 0.4; }
 	double horizontal_margin() const noexcept { return size * 0.38; }

@@ -16,22 +16,24 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include "text-renderer.hpp"
-#include <algorithm>
-#include <cmath>
-#include <cstdio>
-#include <cstring>
-#include <ctime>
-#include <memory>
-#include <obs.h>
+#include <graphics/graphics.h>
+#include <graphics/vec4.h>
 #include <obs-data.h>
 #include <obs-module.h>
 #include <obs-properties.h>
 #include <obs-source.h>
+#include <obs.h>
 
+#include "font-dialog.hpp"
+#include "text-renderer.hpp"
+
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
-#include <graphics/graphics.h>
-#include <graphics/vec4.h>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -47,18 +49,16 @@ constexpr const char *shadow_name = "shadow";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
-#ifdef _WIN32
-constexpr const char *default_font_face = "Calibri";
-#elif defined(__APPLE__)
-constexpr const char *default_font_face = "Optima";
+#if defined(_WIN32) || defined(__APPLE__)
+constexpr const char *default_font_face = "Impact";
 #else
 constexpr const char *default_font_face = "Sans Serif";
 #endif
+constexpr const char *default_font_style = "Regular";
 } // namespace settings
 
 struct clock_source {
 	obs_source_t *source;
-
 	std::unique_ptr<prepared_clock> clock;
 
 	date_format format = date_format::month_day_weekday;
@@ -81,10 +81,6 @@ constexpr date_format_option date_format_options[] = {
 	{date_format::month_name_day, "month_name_day"},
 	{date_format::day_month_name, "day_month_name"},
 };
-
-constexpr int sample_month = 1;
-constexpr int sample_day = 23;
-constexpr int sample_weekday = 5;
 
 const char *clock_source_get_name(void *)
 {
@@ -168,6 +164,11 @@ int suggested_colon_offset_percent(const std::string &font_face, const std::stri
 			  settings::colon_offset_percent_min, settings::colon_offset_percent_max);
 }
 
+std::string font_display_text(const std::string &font_face, const std::string &font_style)
+{
+	return font_style.empty() ? font_face : font_face + " " + font_style;
+}
+
 void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
@@ -178,8 +179,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
 
-	const std::string font_display = font_style.empty() ? font_face : font_face + " " + font_style;
-	obs_data_set_string(settings, settings::font_display_name, font_display.c_str());
+	obs_data_set_string(settings, settings::font_display_name, font_display_text(font_face, font_style).c_str());
 
 	if (!obs_data_has_user_value(settings, settings::colon_offset_percent_name)) {
 		const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
@@ -233,7 +233,7 @@ std::uint32_t clock_source_get_height(void *data)
 void clock_source_get_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
-	obs_data_set_default_string(settings, settings::font_style_name, "Bold");
+	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
 	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_int(settings, settings::size_name, 50);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
@@ -268,12 +268,16 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	auto *context = static_cast<clock_source *>(data);
 
 	obs_data_t *settings = obs_source_get_settings(context->source);
+	std::string font_face = obs_data_get_string(settings, settings::font_face_name);
+	std::string font_style = obs_data_get_string(settings, settings::font_style_name);
+	if (!select_font(font_face, font_style, context->format)) {
+		obs_data_release(settings);
+		return false;
+	}
 
-	// TODO: フォント選択ダイアログを表示する
-	const char *font_face = "Optima";
-	const char *font_style = "Bold";
-	obs_data_set_string(settings, settings::font_face_name, font_face);
-	obs_data_set_string(settings, settings::font_style_name, font_style);
+	obs_data_set_string(settings, settings::font_face_name, font_face.c_str());
+	obs_data_set_string(settings, settings::font_style_name, font_style.c_str());
+	obs_data_set_string(settings, settings::font_display_name, font_display_text(font_face, font_style).c_str());
 
 	const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
 	obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
@@ -288,8 +292,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
-	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.FontDisplay"),
-				OBS_TEXT_INFO);
+	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
 	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
 				   clock_source_select_font, data);
 

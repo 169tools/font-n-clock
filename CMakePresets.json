@@ -8,11 +8,7 @@
 	"configurePresets": [
 		{
 			"name": "template",
-			"hidden": true,
-			"cacheVariables": {
-				"ENABLE_FRONTEND_API": false,
-				"ENABLE_QT": false
-			}
+			"hidden": true
 		},
 		{
 			"name": "macos",

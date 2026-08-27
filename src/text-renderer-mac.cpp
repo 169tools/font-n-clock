@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "cf-ptr.hpp"
 #include "layout.hpp"
 #include "text-renderer.hpp"
+
 #include <CoreFoundation/CFArray.h>
 #include <CoreFoundation/CFAttributedString.h>
 #include <CoreFoundation/CFBase.h>
@@ -34,10 +35,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreGraphics/CGFont.h>
 #include <CoreGraphics/CGGeometry.h>
 #include <CoreGraphics/CGImage.h>
-#include <CoreText/CTRun.h>
 #include <CoreText/CTFont.h>
 #include <CoreText/CTFontDescriptor.h>
 #include <CoreText/CTLine.h>
+#include <CoreText/CTRun.h>
 #include <CoreText/CTStringAttributes.h>
 #include <MacTypes.h>
 #include <algorithm>
