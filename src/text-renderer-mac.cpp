@@ -43,7 +43,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <MacTypes.h>
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -429,7 +428,9 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const row_style date_row = {.font = date_font.get(), .tracking_em = style.caption_tracking_em()};
+	const row_style date_row = {.font = date_font.get(),
+				    .tracking_em =
+					    style.caption_tracking_em()}; // 後続 PR で caption_row にリネームする
 	const row_extents time_extents =
 		time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em}, style.twelve_hour);
 
@@ -437,35 +438,21 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	double widest_row = time_extents.width;
-	double meridiem_baseline_y = 0;
-	double time_baseline_y = time_extents.descent;
-
+	std::optional<row_extents> meridiem_extents;
 	if (style.twelve_hour) {
-		const row_extents meridiem_extents = meridiem_reference_extents(date_row);
-		if (meridiem_extents.width <= 0) {
+		meridiem_extents = meridiem_reference_extents(date_row);
+		if (meridiem_extents->width <= 0) {
 			return nullptr;
 		}
-		widest_row = std::max(widest_row, meridiem_extents.width);
-		meridiem_baseline_y = meridiem_extents.descent;
-		time_baseline_y =
-			meridiem_baseline_y + meridiem_extents.ascent + style.row_spacing() + time_extents.descent;
 	}
 
-	double date_baseline_y = 0;
-	double ink_top = time_baseline_y + time_extents.ascent;
+	std::optional<row_extents> date_extents;
 	if (style.format != date_format::none) {
-		const row_extents date_extents = date_reference_extents(date_row, style.format);
-		if (date_extents.width <= 0) {
+		date_extents = date_reference_extents(date_row, style.format);
+		if (date_extents->width <= 0) {
 			return nullptr;
 		}
-		widest_row = std::max(widest_row, date_extents.width);
-		date_baseline_y = ink_top + style.row_spacing() + date_extents.descent;
-		ink_top = date_baseline_y + date_extents.ascent;
 	}
-
-	const double reference_width = widest_row + style.horizontal_margin() * 2;
-	const double reference_height = ink_top + style.top_margin() + style.bottom_margin();
 
 	auto clock = std::make_unique<mac_clock>();
 
@@ -484,15 +471,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->date_tracking_em = style.caption_tracking_em();
 	clock->time_tracking_em = style.tracking_em;
 	clock->space = std::move(space);
-	clock->frame = {
-		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
-		.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
-		.reference_width = reference_width,
-		.date_baseline_y = date_baseline_y + style.bottom_margin(),
-		.time_baseline_y = time_baseline_y + style.bottom_margin(),
-		.meridiem_baseline_y = meridiem_baseline_y + style.bottom_margin(),
-		.colon_offset_px = style.colon_offset_px(),
-	};
+	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
 	return clock;
 }
 

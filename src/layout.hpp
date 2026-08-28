@@ -18,9 +18,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include "text-renderer.hpp"
+
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 inline constexpr double colon_optional_offset_ratio = 0.02;
 inline constexpr double negative_infinity = -std::numeric_limits<double>::infinity();
@@ -72,3 +76,38 @@ struct shadow_style {
 	double offset = 0;
 	double blur = 0;
 };
+
+inline clock_frame solve_frame(const clock_style &style, const std::optional<row_extents> &date,
+			       const row_extents &time, const std::optional<row_extents> &meridiem)
+{
+	double widest_row = time.width;
+	double meridiem_baseline_y = 0;
+	double time_baseline_y = time.descent;
+
+	if (meridiem) {
+		widest_row = std::max(widest_row, meridiem->width);
+		meridiem_baseline_y = meridiem->descent;
+		time_baseline_y = meridiem_baseline_y + meridiem->ascent + style.row_spacing() + time.descent;
+	}
+
+	double date_baseline_y = 0;
+	double ink_top = time_baseline_y + time.ascent;
+	if (date) {
+		widest_row = std::max(widest_row, date->width);
+		date_baseline_y = ink_top + style.row_spacing() + date->descent;
+		ink_top = date_baseline_y + date->ascent;
+	}
+
+	const double reference_width = widest_row + style.horizontal_margin() * 2;
+	const double reference_height = ink_top + style.top_margin() + style.bottom_margin();
+
+	return {
+		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
+		.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
+		.reference_width = reference_width,
+		.date_baseline_y = date_baseline_y + style.bottom_margin(),
+		.time_baseline_y = time_baseline_y + style.bottom_margin(),
+		.meridiem_baseline_y = meridiem_baseline_y + style.bottom_margin(),
+		.colon_offset_px = style.colon_offset_px(),
+	};
+}
