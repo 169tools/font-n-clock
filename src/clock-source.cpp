@@ -84,6 +84,7 @@ constexpr date_format_option date_format_options[] = {
 	{date_format::day_month_weekday, "day_month_weekday"},
 	{date_format::month_name_day, "month_name_day"},
 	{date_format::day_month_name, "day_month_name"},
+	{date_format::none, "none"},
 };
 
 const char *clock_source_get_name(void *)
@@ -314,9 +315,10 @@ obs_properties_t *clock_source_get_properties(void *data)
 							    obs_module_text("ClockSource.DateFormat"),
 							    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	for (const date_format_option &option : date_format_options) {
-		obs_property_list_add_string(
-			date_list, format_date(option.value, sample_month, sample_day, sample_weekday).c_str(),
-			option.id);
+		const std::string name = option.value == date_format::none
+						 ? obs_module_text("ClockSource.DateFormat.None")
+						 : format_date(option.value, sample_month, sample_day, sample_weekday);
+		obs_property_list_add_string(date_list, name.c_str(), option.id);
 	}
 
 	obs_property_t *time_list = obs_properties_add_list(props, settings::twelve_hour_name,

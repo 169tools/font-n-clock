@@ -36,6 +36,7 @@ enum class date_format {
 	day_month_weekday, // 31/12 WED
 	month_name_day,    // DEC 31
 	day_month_name,    // 31 DEC
+	none,              // 日付なし
 };
 
 struct clock_style {
@@ -100,6 +101,8 @@ inline std::string format_date(const date_format format, const int month, const 
 		break;
 	case date_format::day_month_name:
 		std::snprintf(text, sizeof text, "%d %s", d, month_name);
+		break;
+	case date_format::none:
 		break;
 	}
 	return text;
