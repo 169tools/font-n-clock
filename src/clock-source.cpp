@@ -319,7 +319,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 	}
 
 	obs_property_t *time_list = obs_properties_add_list(props, settings::twelve_hour_name,
-							    obs_module_text("ClockSource.DateFormat"),
+							    obs_module_text("ClockSource.TimeFormat"),
 							    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_BOOL);
 	const std::string sample_24h = format_time(sample_hour, sample_minute, false);
 	const std::string sample_12h =
