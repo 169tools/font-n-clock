@@ -57,6 +57,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 struct row_style {
 	CTFontRef font = nullptr;
 	CGColorRef color = nullptr;
+	double tracking_em = 0;
 };
 
 constexpr double reference_point_size = 100;
@@ -117,9 +118,15 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 		return nullptr;
 	}
 
-	const void *keys[] = {kCTFontAttributeName, kCTForegroundColorAttributeName};
-	const void *values[] = {row.font, row.color};
-	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, row.color ? 2 : 1,
+	const double tracking_points = row.tracking_em * CTFontGetSize(row.font);
+	CFPtr<CFNumberRef> tracking(CFNumberCreate(nullptr, kCFNumberDoubleType, &tracking_points));
+	if (!tracking) {
+		return nullptr;
+	}
+
+	const void *keys[] = {kCTFontAttributeName, kCTTrackingAttributeName, kCTForegroundColorAttributeName};
+	const void *values[] = {row.font, tracking.get(), row.color};
+	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, row.color ? 3 : 2,
 							     &kCFTypeDictionaryKeyCallBacks,
 							     &kCFTypeDictionaryValueCallBacks));
 	if (!attributes) {
@@ -306,6 +313,8 @@ public:
 	CFPtr<CTFontRef> date_font;
 	CFPtr<CTFontRef> time_font;
 	CFPtr<CGColorRef> color;
+	double date_tracking_em = 0;
+	double time_tracking_em = 0;
 	std::optional<shadow_style> shadow;
 	CFPtr<CGColorRef> shadow_color;
 	CFPtr<CGColorSpaceRef> space;
@@ -313,8 +322,10 @@ public:
 
 	rendered_text render(const clock_content &content) const override
 	{
-		CFPtr<CTLineRef> date_line = make_line(content.date, {.font = date_font.get(), .color = color.get()});
-		CFPtr<CTLineRef> time_line = make_line(content.time, {.font = time_font.get(), .color = color.get()});
+		CFPtr<CTLineRef> date_line = make_line(
+			content.date, {.font = date_font.get(), .color = color.get(), .tracking_em = date_tracking_em});
+		CFPtr<CTLineRef> time_line = make_line(
+			content.time, {.font = time_font.get(), .color = color.get(), .tracking_em = time_tracking_em});
 		if (!date_line || !time_line) {
 			return {};
 		}
@@ -373,8 +384,9 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	row_extents date_extents = date_reference_extents({.font = date_font.get()}, style.format);
-	row_extents time_extents = time_reference_extents({.font = time_font.get()});
+	row_extents date_extents = date_reference_extents(
+		{.font = date_font.get(), .tracking_em = style.date_tracking_em()}, style.format);
+	row_extents time_extents = time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em});
 	if (date_extents.width <= 0 || time_extents.width <= 0) {
 		return nullptr;
 	}
@@ -399,13 +411,17 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->date_font = std::move(date_font);
 	clock->time_font = std::move(time_font);
 	clock->color = std::move(color);
+	clock->date_tracking_em = style.date_tracking_em();
+	clock->time_tracking_em = style.tracking_em;
 	clock->space = std::move(space);
-	clock->frame = {.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
-			.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
-			.reference_width = reference_width,
-			.date_baseline_y = date_baseline_y + style.bottom_margin(),
-			.time_baseline_y = time_baseline_y + style.bottom_margin(),
-			.colon_offset_px = style.colon_offset_px()};
+	clock->frame = {
+		.width = static_cast<std::uint32_t>(std::ceil(reference_width)),
+		.height = static_cast<std::uint32_t>(std::ceil(reference_height)),
+		.reference_width = reference_width,
+		.date_baseline_y = date_baseline_y + style.bottom_margin(),
+		.time_baseline_y = time_baseline_y + style.bottom_margin(),
+		.colon_offset_px = style.colon_offset_px(),
+	};
 	return clock;
 }
 

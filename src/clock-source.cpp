@@ -44,11 +44,14 @@ constexpr const char *select_font_name = "select_font";
 constexpr const char *font_face_name = "font_face";
 constexpr const char *font_style_name = "font_style";
 constexpr const char *size_name = "size";
+constexpr const char *colon_offset_percent_name = "colon_offset_percent";
+constexpr const char *tracking_percent_name = "tracking_percent";
 constexpr const char *color_name = "color";
 constexpr const char *shadow_name = "shadow";
-constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
+constexpr const int tracking_percent_min = -20;
+constexpr const int tracking_percent_max = 0;
 #if defined(_WIN32) || defined(__APPLE__)
 constexpr const char *default_font_face = "Impact";
 #else
@@ -176,6 +179,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto font_face = static_cast<std::string>(obs_data_get_string(settings, settings::font_face_name));
 	auto font_style = static_cast<std::string>(obs_data_get_string(settings, settings::font_style_name));
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
+	auto tracking_percent = static_cast<double>(obs_data_get_int(settings, settings::tracking_percent_name));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
 
@@ -187,13 +191,17 @@ void clock_source_update(void *data, obs_data_t *settings)
 	}
 	auto colon_offset_percent =
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
-	context->clock = prepare_clock({.format = format,
-					.font_face = font_face,
-					.font_style = font_style,
-					.size = size,
-					.color = color,
-					.shadow = shadow,
-					.colon_offset_ratio = colon_offset_percent / 100});
+
+	context->clock = prepare_clock({
+		.format = format,
+		.font_face = font_face,
+		.font_style = font_style,
+		.size = size,
+		.colon_offset_ratio = colon_offset_percent / 100,
+		.tracking_em = tracking_percent / 100,
+		.color = color,
+		.shadow = shadow,
+	});
 
 	context->format = format;
 	context->last_read = 0;
@@ -232,11 +240,12 @@ std::uint32_t clock_source_get_height(void *data)
 
 void clock_source_get_defaults(obs_data_t *settings)
 {
+	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
 	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
-	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
 	obs_data_set_default_int(settings, settings::size_name, 50);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
+	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
 	obs_data_set_default_bool(settings, settings::shadow_name, false);
 }
@@ -292,10 +301,6 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
-	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
-	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
-				   clock_source_select_font, data);
-
 	obs_property_t *list = obs_properties_add_list(props, settings::date_format_name,
 						       obs_module_text("ClockSource.DateFormat"), OBS_COMBO_TYPE_LIST,
 						       OBS_COMBO_FORMAT_STRING);
@@ -304,10 +309,17 @@ obs_properties_t *clock_source_get_properties(void *data)
 			list, format_date(option.value, sample_month, sample_day, sample_weekday).c_str(), option.id);
 	}
 
+	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
+	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
+				   clock_source_select_font, data);
+
 	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
 	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
 				      obs_module_text("ClockSource.ColonOffsetPercent"),
 				      settings::colon_offset_percent_min, settings::colon_offset_percent_max, 1);
+	obs_properties_add_int_slider(props, settings::tracking_percent_name,
+				      obs_module_text("ClockSource.TrackingPercent"), settings::tracking_percent_min,
+				      settings::tracking_percent_max, 1);
 	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
 	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	return props;
