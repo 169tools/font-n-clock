@@ -42,12 +42,14 @@ struct clock_style {
 	std::string font_face;
 	std::string font_style;
 	double size = 50;
+	double colon_offset_ratio = 0;
+	double tracking_em = 0;
 	std::uint32_t color = 0xffffffff;
 	bool shadow = false;
-	double colon_offset_ratio = 0;
 
 	double date_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
+	double date_tracking_em() const noexcept { return tracking_em * 0.8; }
 	double date_and_time_spacing() const noexcept { return size * 0.24; }
 	double top_margin() const noexcept { return size * 0.36; }
 	double bottom_margin() const noexcept { return size * 0.4; }
