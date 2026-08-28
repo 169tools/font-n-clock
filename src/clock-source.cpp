@@ -30,7 +30,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <memory>
@@ -39,6 +38,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace settings {
 constexpr const char *date_format_name = "date_format";
+constexpr const char *twelve_hour_name = "twelve_hour";
 constexpr const char *font_display_name = "font_display";
 constexpr const char *select_font_name = "select_font";
 constexpr const char *font_face_name = "font_face";
@@ -65,6 +65,7 @@ struct clock_source {
 	std::unique_ptr<prepared_clock> clock;
 
 	date_format format = date_format::month_day_weekday;
+	bool twelve_hour = false;
 	clock_content content;
 	std::time_t last_read = 0;
 
@@ -90,7 +91,7 @@ const char *clock_source_get_name(void *)
 	return obs_module_text("ClockSource");
 }
 
-clock_content read_clock(std::time_t now, const date_format format)
+clock_content read_clock(std::time_t now, const date_format format, const bool twelve_hour)
 {
 	std::tm local = {};
 #ifdef _WIN32
@@ -104,9 +105,11 @@ clock_content read_clock(std::time_t now, const date_format format)
 	const int minute = std::clamp(local.tm_min, 0, 59);
 	const int weekday = std::clamp(local.tm_wday, 0, 6);
 
-	char time_text[6];
-	std::snprintf(time_text, sizeof time_text, "%d:%02d", hour, minute);
-	return {.date = format_date(format, month, day, weekday), .time = time_text};
+	return {
+		.date = format_date(format, month, day, weekday),
+		.time = format_time(hour, minute, twelve_hour),
+		.meridiem = format_meridiem(hour, twelve_hour),
+	};
 }
 
 bool refresh_content(clock_source *context)
@@ -117,8 +120,9 @@ bool refresh_content(clock_source *context)
 	}
 	context->last_read = now;
 
-	clock_content content = read_clock(now, context->format);
-	if (content.date == context->content.date && content.time == context->content.time) {
+	clock_content content = read_clock(now, context->format, context->twelve_hour);
+	if (content.date == context->content.date && content.time == context->content.time &&
+	    content.meridiem == context->content.meridiem) {
 		return false;
 	}
 
@@ -176,6 +180,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 {
 	auto *context = static_cast<clock_source *>(data);
 	date_format format = read_date_format(settings);
+	auto twelve_hour = static_cast<bool>(obs_data_get_bool(settings, settings::twelve_hour_name));
 	auto font_face = static_cast<std::string>(obs_data_get_string(settings, settings::font_face_name));
 	auto font_style = static_cast<std::string>(obs_data_get_string(settings, settings::font_style_name));
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
@@ -194,6 +199,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 
 	context->clock = prepare_clock({
 		.format = format,
+		.twelve_hour = twelve_hour,
 		.font_face = font_face,
 		.font_style = font_style,
 		.size = size,
@@ -204,6 +210,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 	});
 
 	context->format = format;
+	context->twelve_hour = twelve_hour;
 	context->last_read = 0;
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
@@ -241,6 +248,7 @@ std::uint32_t clock_source_get_height(void *data)
 void clock_source_get_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, settings::date_format_name, date_format_options[0].id);
+	obs_data_set_default_bool(settings, settings::twelve_hour_name, false);
 	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
 	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
 	obs_data_set_default_int(settings, settings::size_name, 50);
@@ -279,7 +287,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	obs_data_t *settings = obs_source_get_settings(context->source);
 	std::string font_face = obs_data_get_string(settings, settings::font_face_name);
 	std::string font_style = obs_data_get_string(settings, settings::font_style_name);
-	if (!select_font(font_face, font_style, context->format)) {
+	if (!select_font(font_face, font_style, context->format, context->twelve_hour)) {
 		obs_data_release(settings);
 		return false;
 	}
@@ -302,13 +310,23 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
-	obs_property_t *list = obs_properties_add_list(props, settings::date_format_name,
-						       obs_module_text("ClockSource.DateFormat"), OBS_COMBO_TYPE_LIST,
-						       OBS_COMBO_FORMAT_STRING);
+	obs_property_t *date_list = obs_properties_add_list(props, settings::date_format_name,
+							    obs_module_text("ClockSource.DateFormat"),
+							    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	for (const date_format_option &option : date_format_options) {
 		obs_property_list_add_string(
-			list, format_date(option.value, sample_month, sample_day, sample_weekday).c_str(), option.id);
+			date_list, format_date(option.value, sample_month, sample_day, sample_weekday).c_str(),
+			option.id);
 	}
+
+	obs_property_t *time_list = obs_properties_add_list(props, settings::twelve_hour_name,
+							    obs_module_text("ClockSource.TimeFormat"),
+							    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_BOOL);
+	const std::string sample_24h = format_time(sample_hour, sample_minute, false);
+	const std::string sample_12h =
+		format_time(sample_hour, sample_minute, true) + " " + format_meridiem(sample_hour, true);
+	obs_property_list_add_bool(time_list, sample_24h.c_str(), false);
+	obs_property_list_add_bool(time_list, sample_12h.c_str(), true);
 
 	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
 	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),

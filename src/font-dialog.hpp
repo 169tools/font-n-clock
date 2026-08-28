@@ -22,4 +22,4 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <string>
 
-bool select_font(std::string &face, std::string &style, const date_format format);
+bool select_font(std::string &face, std::string &style, const date_format format, const bool twelve_hour);

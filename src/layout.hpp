@@ -63,6 +63,7 @@ struct clock_frame {
 	double reference_width = 0;
 	double date_baseline_y = 0;
 	double time_baseline_y = 0;
+	double meridiem_baseline_y = 0;
 	double colon_offset_px = 0;
 };
 

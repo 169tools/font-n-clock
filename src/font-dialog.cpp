@@ -46,9 +46,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 constexpr double preview_size = 30;
 
-QPixmap render_preview(const QString &family, const QString &style, const date_format format)
+QPixmap render_preview(const QString &family, const QString &style, const date_format format, const bool twelve_hour)
 {
-	clock_style spec{.format = format};
+	clock_style spec{.format = format, .twelve_hour = twelve_hour};
 	spec.font_face = family.toStdString();
 	spec.font_style = style.toStdString();
 	spec.size = preview_size;
@@ -61,8 +61,11 @@ QPixmap render_preview(const QString &family, const QString &style, const date_f
 		return {};
 	}
 
-	const rendered_text bitmap = clock->render(
-		{.date = format_date(format, sample_month, sample_day, sample_weekday), .time = sample_time});
+	const rendered_text bitmap = clock->render({
+		.date = format_date(format, sample_month, sample_day, sample_weekday),
+		.time = format_time(sample_hour, sample_minute, twelve_hour),
+		.meridiem = format_meridiem(sample_hour, twelve_hour),
+	});
 	if (!bitmap.valid()) {
 		return {};
 	}
@@ -82,7 +85,7 @@ QString pick_default_style(const QStringList &styles)
 	return styles.isEmpty() ? QString() : styles.first();
 }
 
-bool select_font(std::string &face, std::string &style, const date_format format)
+bool select_font(std::string &face, std::string &style, const date_format format, const bool twelve_hour)
 {
 	auto *parent = static_cast<QWidget *>(obs_frontend_get_main_window());
 	QDialog dialog(parent);
@@ -147,13 +150,13 @@ bool select_font(std::string &face, std::string &style, const date_format format
 				 }
 			 });
 
-	const auto refresh_preview = [families, styles, preview, format]() {
+	const auto refresh_preview = [families, styles, preview, format, twelve_hour]() {
 		if (!families->currentItem()) {
 			return;
 		}
 
 		const QString style_name = styles->currentItem() ? styles->currentItem()->text() : QString();
-		const QPixmap pixmap = render_preview(families->currentItem()->text(), style_name, format);
+		const QPixmap pixmap = render_preview(families->currentItem()->text(), style_name, format, twelve_hour);
 		preview->setPixmap(pixmap);
 	};
 
