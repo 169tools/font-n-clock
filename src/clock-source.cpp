@@ -290,6 +290,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 
 	const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
 	obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
+	obs_data_set_int(settings, settings::tracking_percent_name, 0);
 
 	obs_source_update(context->source, settings);
 	obs_data_release(settings);
