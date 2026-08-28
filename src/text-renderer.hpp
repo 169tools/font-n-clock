@@ -28,7 +28,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 constexpr int sample_month = 1;
 constexpr int sample_day = 23;
 constexpr int sample_weekday = 5;
-constexpr const char *sample_time = "12:34";
+constexpr int sample_hour = 19;
+constexpr int sample_minute = 45;
 
 enum class date_format {
 	month_day_weekday, // 12/31 WED
@@ -39,6 +40,7 @@ enum class date_format {
 
 struct clock_style {
 	date_format format = date_format::month_day_weekday;
+	bool twelve_hour = false;
 	std::string font_face;
 	std::string font_style;
 	double size = 50;
@@ -70,11 +72,13 @@ struct rendered_text {
 struct clock_content {
 	std::string date;
 	std::string time;
+	std::string meridiem;
 };
 
 constexpr const char *month_names[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN",
 				       "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
 constexpr const char *weekday_names[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+constexpr const char *meridiem_names[] = {"A.M.", "P.M."};
 
 inline std::string format_date(const date_format format, const int month, const int day, const int weekday)
 {
@@ -99,6 +103,25 @@ inline std::string format_date(const date_format format, const int month, const 
 		break;
 	}
 	return text;
+}
+
+inline std::string format_time(const int hour, const int minute, const bool twelve_hour)
+{
+	const int h = std::clamp(hour, 0, 23);
+	const int m = std::clamp(minute, 0, 59);
+	const int shown_hour = twelve_hour ? (h % 12 == 0 ? 12 : h % 12) : h;
+
+	char text[6] = "";
+	std::snprintf(text, sizeof text, "%d:%02d", shown_hour, m);
+	return text;
+}
+
+inline const char *format_meridiem(const int hour, const bool twelve_hour)
+{
+	if (!twelve_hour) {
+		return "";
+	}
+	return meridiem_names[std::clamp(hour, 0, 23) < 12 ? 0 : 1];
 }
 
 class prepared_clock {

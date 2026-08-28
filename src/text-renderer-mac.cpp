@@ -245,10 +245,12 @@ row_extents date_reference_extents(const row_style &row, const date_format forma
 	return max_extents;
 }
 
-row_extents time_reference_extents(const row_style &row)
+row_extents time_reference_extents(const row_style &row, const bool twelve_hour)
 {
 	row_extents max_extents;
-	for (int hour = 0; hour < 24; ++hour) {
+	const int first_hour = twelve_hour ? 1 : 0;
+	const int last_hour = twelve_hour ? 12 : 23;
+	for (int hour = first_hour; hour <= last_hour; ++hour) {
 		for (int minute = 0; minute < 60; ++minute) {
 			char text[6];
 			std::snprintf(text, sizeof text, "%d:%02d", hour, minute);
@@ -259,6 +261,19 @@ row_extents time_reference_extents(const row_style &row)
 			}
 			max_extents.extend(measure(line.get()));
 		}
+	}
+	return max_extents;
+}
+
+row_extents meridiem_reference_extents(const row_style &row)
+{
+	row_extents max_extents;
+	for (const char *meridiem : meridiem_names) {
+		CFPtr<CTLineRef> line = make_line(meridiem, row);
+		if (!line) {
+			return {};
+		}
+		max_extents.extend(measure(line.get()));
 	}
 	return max_extents;
 }
@@ -322,12 +337,29 @@ public:
 
 	rendered_text render(const clock_content &content) const override
 	{
-		CFPtr<CTLineRef> date_line = make_line(
-			content.date, {.font = date_font.get(), .color = color.get(), .tracking_em = date_tracking_em});
-		CFPtr<CTLineRef> time_line = make_line(
-			content.time, {.font = time_font.get(), .color = color.get(), .tracking_em = time_tracking_em});
+		const row_style date_row = {
+			.font = date_font.get(),
+			.color = color.get(),
+			.tracking_em = date_tracking_em,
+		};
+		const row_style time_row = {
+			.font = time_font.get(),
+			.color = color.get(),
+			.tracking_em = time_tracking_em,
+		};
+
+		CFPtr<CTLineRef> date_line = make_line(content.date, date_row);
+		CFPtr<CTLineRef> time_line = make_line(content.time, time_row);
 		if (!date_line || !time_line) {
 			return {};
+		}
+
+		CFPtr<CTLineRef> meridiem_line;
+		if (!content.meridiem.empty()) {
+			meridiem_line = make_line(content.meridiem, date_row);
+			if (!meridiem_line) {
+				return {};
+			}
 		}
 
 		rendered_text result = {.width = frame.width, .height = frame.height};
@@ -356,6 +388,10 @@ public:
 		draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
 		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y,
 			      frame.colon_offset_px);
+		if (meridiem_line) {
+			draw_centered(context.get(), meridiem_line.get(), frame.reference_width,
+				      frame.meridiem_baseline_y);
+		}
 
 		return result;
 	}
@@ -384,14 +420,27 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	row_extents date_extents = date_reference_extents(
-		{.font = date_font.get(), .tracking_em = style.date_tracking_em()}, style.format);
-	row_extents time_extents = time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em});
+	const row_style date_row = {.font = date_font.get(), .tracking_em = style.date_tracking_em()};
+	row_extents date_extents = date_reference_extents(date_row, style.format);
+	row_extents time_extents =
+		time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em}, style.twelve_hour);
 	if (date_extents.width <= 0 || time_extents.width <= 0) {
 		return nullptr;
 	}
-	const double reference_width = std::max(date_extents.width, time_extents.width) + style.horizontal_margin() * 2;
-	const double time_baseline_y = time_extents.descent;
+	double widest_row = std::max(date_extents.width, time_extents.width);
+	double meridiem_baseline_y = 0;
+	double time_baseline_y = time_extents.descent;
+	if (style.twelve_hour) {
+		const row_extents meridiem_extents = meridiem_reference_extents(date_row);
+		if (meridiem_extents.width <= 0) {
+			return nullptr;
+		}
+		widest_row = std::max(widest_row, meridiem_extents.width);
+		meridiem_baseline_y = meridiem_extents.descent;
+		time_baseline_y = meridiem_baseline_y + meridiem_extents.ascent + style.date_and_time_spacing() +
+				  time_extents.descent;
+	}
+	const double reference_width = widest_row + style.horizontal_margin() * 2;
 	const double date_baseline_y =
 		time_baseline_y + time_extents.ascent + style.date_and_time_spacing() + date_extents.descent;
 	const double reference_height =
@@ -420,6 +469,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		.reference_width = reference_width,
 		.date_baseline_y = date_baseline_y + style.bottom_margin(),
 		.time_baseline_y = time_baseline_y + style.bottom_margin(),
+		.meridiem_baseline_y = meridiem_baseline_y + style.bottom_margin(),
 		.colon_offset_px = style.colon_offset_px(),
 	};
 	return clock;
