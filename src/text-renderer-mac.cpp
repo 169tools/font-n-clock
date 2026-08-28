@@ -324,10 +324,10 @@ void draw_centered(CGContextRef context, CTLineRef line, const double reference_
 
 class mac_clock : public prepared_clock {
 public:
-	CFPtr<CTFontRef> date_font;
+	CFPtr<CTFontRef> caption_font;
 	CFPtr<CTFontRef> time_font;
 	CFPtr<CGColorRef> color;
-	double date_tracking_em = 0;
+	double caption_tracking_em = 0;
 	double time_tracking_em = 0;
 	std::optional<shadow_style> shadow;
 	CFPtr<CGColorRef> shadow_color;
@@ -336,11 +336,12 @@ public:
 
 	rendered_text render(const clock_content &content) const override
 	{
-		const row_style date_row = {
-			.font = date_font.get(),
+		const row_style caption_row = {
+			.font = caption_font.get(),
 			.color = color.get(),
-			.tracking_em = date_tracking_em,
+			.tracking_em = caption_tracking_em,
 		};
+
 		const row_style time_row = {
 			.font = time_font.get(),
 			.color = color.get(),
@@ -349,7 +350,7 @@ public:
 
 		CFPtr<CTLineRef> date_line;
 		if (!content.date.empty()) {
-			date_line = make_line(content.date, date_row);
+			date_line = make_line(content.date, caption_row);
 			if (!date_line) {
 				return {};
 			}
@@ -362,7 +363,7 @@ public:
 
 		CFPtr<CTLineRef> meridiem_line;
 		if (!content.meridiem.empty()) {
-			meridiem_line = make_line(content.meridiem, date_row);
+			meridiem_line = make_line(content.meridiem, caption_row);
 			if (!meridiem_line) {
 				return {};
 			}
@@ -414,23 +415,21 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	const std::array<ink_extents, 10> probe_digits = digit_extents({.font = probe.get()});
 
-	const double date_point_size = solve_point_size(probe_digits, style.caption_ink_height());
+	const double caption_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
-	if (date_point_size <= 0 || time_point_size <= 0) {
+	if (caption_point_size <= 0 || time_point_size <= 0) {
 		return nullptr;
 	}
 
-	CFPtr<CTFontRef> date_font = make_font(style.font_face, style.font_style, date_point_size);
+	CFPtr<CTFontRef> caption_font = make_font(style.font_face, style.font_style, caption_point_size);
 	CFPtr<CTFontRef> time_font = make_font(style.font_face, style.font_style, time_point_size);
 	CFPtr<CGColorRef> color = make_color(style.color);
 	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
-	if (!date_font || !time_font || !color || !space) {
+	if (!caption_font || !time_font || !color || !space) {
 		return nullptr;
 	}
 
-	const row_style date_row = {.font = date_font.get(),
-				    .tracking_em =
-					    style.caption_tracking_em()}; // 後続 PR で caption_row にリネームする
+	const row_style caption_row = {.font = caption_font.get(), .tracking_em = style.caption_tracking_em()};
 	const row_extents time_extents =
 		time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em}, style.twelve_hour);
 
@@ -440,7 +439,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	std::optional<row_extents> meridiem_extents;
 	if (style.twelve_hour) {
-		meridiem_extents = meridiem_reference_extents(date_row);
+		meridiem_extents = meridiem_reference_extents(caption_row);
 		if (meridiem_extents->width <= 0) {
 			return nullptr;
 		}
@@ -448,7 +447,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	std::optional<row_extents> date_extents;
 	if (style.format != date_format::none) {
-		date_extents = date_reference_extents(date_row, style.format);
+		date_extents = date_reference_extents(caption_row, style.format);
 		if (date_extents->width <= 0) {
 			return nullptr;
 		}
@@ -465,10 +464,10 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		clock->shadow_color = std::move(shadow_color);
 	}
 
-	clock->date_font = std::move(date_font);
+	clock->caption_font = std::move(caption_font);
 	clock->time_font = std::move(time_font);
 	clock->color = std::move(color);
-	clock->date_tracking_em = style.caption_tracking_em();
+	clock->caption_tracking_em = style.caption_tracking_em();
 	clock->time_tracking_em = style.tracking_em;
 	clock->space = std::move(space);
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
