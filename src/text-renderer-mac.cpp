@@ -392,7 +392,9 @@ public:
 						    shadow_color.get());
 		}
 
-		draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
+		if (date_line) {
+			draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
+		}
 		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y,
 			      frame.colon_offset_px);
 		if (meridiem_line) {
