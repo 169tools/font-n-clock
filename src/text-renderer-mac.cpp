@@ -348,9 +348,16 @@ public:
 			.tracking_em = time_tracking_em,
 		};
 
-		CFPtr<CTLineRef> date_line = make_line(content.date, date_row);
+		CFPtr<CTLineRef> date_line;
+		if (!content.date.empty()) {
+			date_line = make_line(content.date, date_row);
+			if (!date_line) {
+				return {};
+			}
+		}
+
 		CFPtr<CTLineRef> time_line = make_line(content.time, time_row);
-		if (!date_line || !time_line) {
+		if (!time_line) {
 			return {};
 		}
 
@@ -385,7 +392,9 @@ public:
 						    shadow_color.get());
 		}
 
-		draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
+		if (date_line) {
+			draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
+		}
 		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y,
 			      frame.colon_offset_px);
 		if (meridiem_line) {
@@ -421,15 +430,17 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	const row_style date_row = {.font = date_font.get(), .tracking_em = style.caption_tracking_em()};
-	row_extents date_extents = date_reference_extents(date_row, style.format);
-	row_extents time_extents =
+	const row_extents time_extents =
 		time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em}, style.twelve_hour);
-	if (date_extents.width <= 0 || time_extents.width <= 0) {
+
+	if (time_extents.width <= 0) {
 		return nullptr;
 	}
-	double widest_row = std::max(date_extents.width, time_extents.width);
+
+	double widest_row = time_extents.width;
 	double meridiem_baseline_y = 0;
 	double time_baseline_y = time_extents.descent;
+
 	if (style.twelve_hour) {
 		const row_extents meridiem_extents = meridiem_reference_extents(date_row);
 		if (meridiem_extents.width <= 0) {
@@ -440,11 +451,21 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		time_baseline_y =
 			meridiem_baseline_y + meridiem_extents.ascent + style.row_spacing() + time_extents.descent;
 	}
+
+	double date_baseline_y = 0;
+	double ink_top = time_baseline_y + time_extents.ascent;
+	if (style.format != date_format::none) {
+		const row_extents date_extents = date_reference_extents(date_row, style.format);
+		if (date_extents.width <= 0) {
+			return nullptr;
+		}
+		widest_row = std::max(widest_row, date_extents.width);
+		date_baseline_y = ink_top + style.row_spacing() + date_extents.descent;
+		ink_top = date_baseline_y + date_extents.ascent;
+	}
+
 	const double reference_width = widest_row + style.horizontal_margin() * 2;
-	const double date_baseline_y =
-		time_baseline_y + time_extents.ascent + style.row_spacing() + date_extents.descent;
-	const double reference_height =
-		date_baseline_y + date_extents.ascent + style.top_margin() + style.bottom_margin();
+	const double reference_height = ink_top + style.top_margin() + style.bottom_margin();
 
 	auto clock = std::make_unique<mac_clock>();
 
