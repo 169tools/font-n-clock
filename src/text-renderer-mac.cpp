@@ -406,7 +406,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	const std::array<ink_extents, 10> probe_digits = digit_extents({.font = probe.get()});
 
-	const double date_point_size = solve_point_size(probe_digits, style.date_ink_height());
+	const double date_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
 	if (date_point_size <= 0 || time_point_size <= 0) {
 		return nullptr;
@@ -420,7 +420,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const row_style date_row = {.font = date_font.get(), .tracking_em = style.date_tracking_em()};
+	const row_style date_row = {.font = date_font.get(), .tracking_em = style.caption_tracking_em()};
 	row_extents date_extents = date_reference_extents(date_row, style.format);
 	row_extents time_extents =
 		time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em}, style.twelve_hour);
@@ -437,12 +437,12 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		}
 		widest_row = std::max(widest_row, meridiem_extents.width);
 		meridiem_baseline_y = meridiem_extents.descent;
-		time_baseline_y = meridiem_baseline_y + meridiem_extents.ascent + style.date_and_time_spacing() +
-				  time_extents.descent;
+		time_baseline_y =
+			meridiem_baseline_y + meridiem_extents.ascent + style.row_spacing() + time_extents.descent;
 	}
 	const double reference_width = widest_row + style.horizontal_margin() * 2;
 	const double date_baseline_y =
-		time_baseline_y + time_extents.ascent + style.date_and_time_spacing() + date_extents.descent;
+		time_baseline_y + time_extents.ascent + style.row_spacing() + date_extents.descent;
 	const double reference_height =
 		date_baseline_y + date_extents.ascent + style.top_margin() + style.bottom_margin();
 
@@ -460,7 +460,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->date_font = std::move(date_font);
 	clock->time_font = std::move(time_font);
 	clock->color = std::move(color);
-	clock->date_tracking_em = style.date_tracking_em();
+	clock->date_tracking_em = style.caption_tracking_em();
 	clock->time_tracking_em = style.tracking_em;
 	clock->space = std::move(space);
 	clock->frame = {
