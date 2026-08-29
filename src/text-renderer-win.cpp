@@ -16,6 +16,9 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include "layout.hpp"
+
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 #define NOMINMAX
@@ -218,6 +221,74 @@ public:
 		return E_NOINTERFACE;
 	}
 };
+
+ink_extents measure_glyphs(const glyph_collector &collected, const double em_size)
+{
+	if (collected.glyphs.empty() || !collected.face) {
+		return {};
+	}
+
+	std::vector<std::uint16_t> indices;
+	indices.reserve(collected.glyphs.size()); // size が分かっているなら array でなく vector にする意味は？
+	for (const glyph_position &glyph : collected.glyphs) {
+		indices.push_back(glyph.index);
+	}
+
+	std::vector<DWRITE_GLYPH_METRICS> metrics(indices.size());
+	if (FAILED(collected.face->GetDesignGlyphMetrics(indices.data(), static_cast<UINT32>(indices.size()),
+							 metrics.data(), FALSE))) {
+		return {};
+	}
+
+	DWRITE_FONT_METRICS font_metrics = {};
+	collected.face->GetMetrics(&font_metrics);
+	if (font_metrics.designUnitsPerEm == 0) {
+		return {};
+	}
+	const double scale = em_size / font_metrics.designUnitsPerEm;
+
+	double min_x = 0;
+	double max_x = 0;
+	double min_y = 0;
+	double max_y = 0;
+	bool any = false;
+
+	for (std::size_t i = 0; i < indices.size(); ++i) {
+		const DWRITE_GLYPH_METRICS &m = metrics[i];
+		const double left = m.leftSideBearing;
+		const double right = m.advanceWidth - m.rightSideBearing; // cast 不要では？
+		const double top = m.verticalOriginY - m.topSideBearing;
+		const double bottom = m.verticalOriginY - m.advanceHeight - m.bottomSideBearing;
+		if (right <= left && top <= bottom) {
+			continue;
+		}
+
+		const double origin_x = collected.glyphs[i].x;
+		const double origin_y = collected.glyphs[i].y;
+		const double l = origin_x + left * scale;
+		const double r = origin_x + right * scale;
+		const double b = origin_y + bottom * scale;
+		const double t = origin_y + top * scale;
+
+		if (!any) {
+			min_x = l;
+			max_x = r;
+			min_y = b;
+			max_y = t;
+			any = true;
+		} else {
+			min_x = std::min(min_x, l);
+			max_x = std::max(max_x, r);
+			min_y = std::min(min_y, b);
+			max_y = std::max(max_x, t);
+		}
+	}
+	if (!any) {
+		return {};
+	}
+
+	return {.width = max_x - min_x, .ascent = max_y, .descent = -min_y, .left = min_x};
+}
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
