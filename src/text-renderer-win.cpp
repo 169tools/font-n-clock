@@ -244,6 +244,9 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected)
 		double cursor = run.baseline_x;
 		for (std::size_t i = 0; i < run.indices.size(); ++i) {
 			const DWRITE_GLYPH_METRICS &m = metrics[i];
+			const double origin_x = cursor + run.offsets[i].advanceOffset;
+			const double origin_y = run.offsets[i].ascenderOffset;
+			cursor += run.advances[i];
 
 			const double left = m.leftSideBearing;
 			const double right = static_cast<double>(m.advanceWidth) - m.rightSideBearing;
@@ -254,9 +257,6 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected)
 				continue;
 			}
 
-			const double origin_x = cursor + run.offsets[i].advanceOffset;
-			const double origin_y = run.offsets[i].ascenderOffset;
-			cursor += run.advances[i];
 			const double l = origin_x + left * scale;
 			const double r = origin_x + right * scale;
 			const double b = origin_y + bottom * scale;
