@@ -219,7 +219,7 @@ public:
 	}
 };
 
-ink_extents measure_glyphs(const glyph_collector &collected, const double em_size)
+std::optional<ink_extents> measure_glyphs(const glyph_collector &collected, const double em_size)
 {
 	double min_x = 0;
 	double max_x = 0;
@@ -241,13 +241,13 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 		std::vector<DWRITE_GLYPH_METRICS> metrics(indices.size());
 		if (FAILED(run.face->GetDesignGlyphMetrics(indices.data(), static_cast<UINT32>(indices.size()),
 							   metrics.data(), FALSE))) {
-			return {};
+			return std::nullopt;
 		}
 
 		DWRITE_FONT_METRICS font_metrics = {};
 		run.face->GetMetrics(&font_metrics);
 		if (font_metrics.designUnitsPerEm == 0) {
-			return {};
+			return std::nullopt;
 		}
 		const double scale = em_size / font_metrics.designUnitsPerEm;
 
@@ -286,9 +286,9 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 	}
 
 	if (!any) {
-		return {};
+		return std::nullopt;
 	}
-	return {.width = max_x - min_x, .ascent = max_y, .descent = -min_y, .left = min_x};
+	return ink_extents{.width = max_x - min_x, .ascent = max_y, .descent = -min_y, .left = min_x};
 }
 
 class dw_measurer : public text_measurer {
