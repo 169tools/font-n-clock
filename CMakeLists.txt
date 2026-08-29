@@ -41,6 +41,7 @@ target_sources(
     src/clock-source.hpp
     src/font-dialog.cpp
     src/font-dialog.hpp
+    src/layout.cpp
     src/layout.hpp
     src/text-renderer.hpp
 )

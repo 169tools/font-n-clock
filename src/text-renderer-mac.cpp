@@ -41,7 +41,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreText/CTRun.h>
 #include <CoreText/CTStringAttributes.h>
 #include <MacTypes.h>
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -58,8 +57,6 @@ struct row_style {
 	CGColorRef color = nullptr;
 	double tracking_em = 0;
 };
-
-constexpr double reference_point_size = 100;
 
 CFPtr<CFStringRef> make_cfstring(const std::string &value)
 {
@@ -149,7 +146,7 @@ CFPtr<CGColorRef> make_shadow_color(const double shadow_opacity)
 	return CFPtr<CGColorRef>(CGColorCreate(space.get(), components));
 }
 
-ink_extents measure(CTLineRef line)
+ink_extents measure_line(CTLineRef line)
 {
 	const CGRect bounds = CTLineGetBoundsWithOptions(line, kCTLineBoundsUseGlyphPathBounds);
 
@@ -159,128 +156,10 @@ ink_extents measure(CTLineRef line)
 		.left = bounds.origin.x};
 }
 
-std::array<ink_extents, 10> digit_extents(const row_style &row)
-{
-	std::array<ink_extents, 10> digits{};
-	for (int i = 0; i <= 9; ++i) {
-		CFPtr<CTLineRef> line = make_line(std::string(1, static_cast<char>('0' + i)), row);
-		if (!line) {
-			return {};
-		}
-		digits[i] = measure(line.get());
-	}
-	return digits;
-}
-
-ink_span digit_envelope(const std::array<ink_extents, 10> &digits)
-{
-	ink_span envelope;
-	for (int i = 0; i <= 9; ++i) {
-		const ink_extents extents = digits[i];
-		envelope.ascent = std::max(envelope.ascent, extents.ascent);
-		envelope.descent = std::max(envelope.descent, extents.descent);
-	}
-	return envelope;
-}
-
-double solve_point_size(const std::array<ink_extents, 10> &digits, const double target_height)
-{
-	const double reference_height = digit_envelope(digits).height();
-	if (reference_height <= 0) {
-		return 0;
-	}
-	return reference_point_size * target_height / reference_height;
-}
-
-row_extents date_reference_extents(const row_style &row, const date_format format)
-{
-	row_extents max_extents;
-	int widest_month = 0;
-	int widest_day = 0;
-
-	double widest = 0;
-	for (int month = 1; month <= 12; ++month) {
-		for (int day = 1; day <= 31; ++day) {
-			CFPtr<CTLineRef> line = make_line(format_date(format, month, day, 0), row);
-			if (!line) {
-				return {};
-			}
-			const double width = measure(line.get()).width;
-			max_extents.width = std::max(max_extents.width, width);
-			if (width > widest) {
-				widest = width;
-				widest_month = month;
-				widest_day = day;
-			}
-		}
-	}
-	if (widest_month == 0) {
-		return {};
-	}
-
-	for (int weekday = 1; weekday < 7; ++weekday) {
-		CFPtr<CTLineRef> line = make_line(format_date(format, widest_month, widest_day, weekday), row);
-		if (!line) {
-			return {};
-		}
-		max_extents.width = std::max(max_extents.width, measure(line.get()).width);
-	}
-
-	std::string height_glyphs = "0123456789";
-	for (const char *weekday : weekday_names) {
-		height_glyphs += weekday;
-	}
-	for (const char *month : month_names) {
-		height_glyphs += month;
-	}
-
-	CFPtr<CTLineRef> line = make_line(height_glyphs, row);
-	if (!line) {
-		return {};
-	}
-	const ink_extents extents = measure(line.get());
-	max_extents.ascent = extents.ascent;
-	max_extents.descent = extents.descent;
-	return max_extents;
-}
-
-row_extents time_reference_extents(const row_style &row, const bool twelve_hour)
-{
-	row_extents max_extents;
-	const int first_hour = twelve_hour ? 1 : 0;
-	const int last_hour = twelve_hour ? 12 : 23;
-	for (int hour = first_hour; hour <= last_hour; ++hour) {
-		for (int minute = 0; minute < 60; ++minute) {
-			char text[6];
-			std::snprintf(text, sizeof text, "%d:%02d", hour, minute);
-
-			CFPtr<CTLineRef> line = make_line(text, row);
-			if (!line) {
-				return {};
-			}
-			max_extents.extend(measure(line.get()));
-		}
-	}
-	return max_extents;
-}
-
-row_extents meridiem_reference_extents(const row_style &row)
-{
-	row_extents max_extents;
-	for (const char *meridiem : meridiem_names) {
-		CFPtr<CTLineRef> line = make_line(meridiem, row);
-		if (!line) {
-			return {};
-		}
-		max_extents.extend(measure(line.get()));
-	}
-	return max_extents;
-}
-
 void draw_centered(CGContextRef context, CTLineRef line, const double reference_width, const double baseline_y,
 		   const double colon_offset_px = 0)
 {
-	const ink_extents ink = measure(line);
+	const ink_extents ink = measure_line(line);
 	const double origin_x = (reference_width - ink.width) / 2 - ink.left;
 
 	CFArrayRef runs = CTLineGetGlyphRuns(line);
@@ -406,6 +285,23 @@ public:
 	}
 };
 
+class ct_measurer : public text_measurer {
+public:
+	explicit ct_measurer(const row_style &row) : row(row) {}
+
+	ink_extents measure(const std::string &text) const override
+	{
+		CFPtr<CTLineRef> line = make_line(text, row);
+		if (!line) {
+			return {};
+		}
+		return measure_line(line.get());
+	}
+
+private:
+	row_style row;
+};
+
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
 	CFPtr<CTFontRef> probe = make_font(style.font_face, style.font_style, reference_point_size);
@@ -413,7 +309,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const std::array<ink_extents, 10> probe_digits = digit_extents({.font = probe.get()});
+	const std::array<ink_extents, 10> probe_digits = digit_extents(ct_measurer({.font = probe.get()}));
 
 	const double caption_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
@@ -429,9 +325,9 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const row_style caption_row = {.font = caption_font.get(), .tracking_em = style.caption_tracking_em()};
-	const row_extents time_extents =
-		time_reference_extents({.font = time_font.get(), .tracking_em = style.tracking_em}, style.twelve_hour);
+	const ct_measurer caption_measurer({.font = caption_font.get(), .tracking_em = style.caption_tracking_em()});
+	const ct_measurer time_measurer({.font = time_font.get(), .tracking_em = style.tracking_em});
+	const row_extents time_extents = time_reference_extents(time_measurer, style.twelve_hour);
 
 	if (time_extents.width <= 0) {
 		return nullptr;
@@ -439,7 +335,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	std::optional<row_extents> meridiem_extents;
 	if (style.twelve_hour) {
-		meridiem_extents = meridiem_reference_extents(caption_row);
+		meridiem_extents = meridiem_reference_extents(caption_measurer);
 		if (meridiem_extents->width <= 0) {
 			return nullptr;
 		}
@@ -447,7 +343,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	std::optional<row_extents> date_extents;
 	if (style.format != date_format::none) {
-		date_extents = date_reference_extents(caption_row, style.format);
+		date_extents = date_reference_extents(caption_measurer, style.format);
 		if (date_extents->width <= 0) {
 			return nullptr;
 		}
@@ -484,19 +380,13 @@ double suggest_colon_offset_ratio(const clock_style &style)
 		return 0;
 	}
 
-	const row_style row = {.font = probe.get()};
-
-	const ink_span digits = digit_envelope(digit_extents(row));
+	const ct_measurer time_measurer({.font = probe.get()});
+	const ink_span digits = digit_envelope(digit_extents(time_measurer));
 	if (digits.height() <= 0) {
 		return 0;
 	}
 
-	CFPtr<CTLineRef> colon = make_line(":", row);
-	if (!colon) {
-		return 0;
-	}
-	const ink_extents colon_ink = measure(colon.get());
-
+	const ink_extents colon_ink = time_measurer.measure(":");
 	const double digit_center = (digits.ascent - digits.descent) / 2;
 	const double colon_center = (colon_ink.ascent - colon_ink.descent) / 2;
 	return (digit_center - colon_center) / digits.height() - colon_optional_offset_ratio;
