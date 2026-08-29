@@ -15,31 +15,30 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
-
-#include "layout.hpp"
-
-#include <algorithm>
-#include <array>
-#include <cstdint>
-#include <optional>
-#include <vector>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <util/base.h>
 #include <util/windows/ComPtr.hpp>
 
+#include "layout.hpp"
 #include "text-renderer.hpp"
 
 #include <Unknwnbase.h>
 #include <WinNls.h>
+#include <algorithm>
+#include <array>
 #include <basetsd.h>
 #include <cstddef>
+#include <cstdint>
 #include <dcommon.h>
 #include <dwrite.h>
 #include <memory>
 #include <minwindef.h>
+#include <optional>
 #include <string>
 #include <stringapiset.h>
+#include <vector>
 #include <winerror.h>
 #include <winnt.h>
 

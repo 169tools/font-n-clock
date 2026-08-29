@@ -4,6 +4,9 @@ Diagnostics:
 ---
 If:
   PathMatch: .*-win\.cpp
+Diagnostics:
+  MissingIncludes: None
+  UnusedIncludes: None
 CompileFlags:
   Compiler: clang-cl
   Add:
