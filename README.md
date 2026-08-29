@@ -6,7 +6,7 @@
 
 ```zsh
 $ brew install cmake ninja xwin obsproject/tools/gersemi obsproject/tools/clang-format@19
-$ xwin --accept-license --arch --output ~/.xwin
+$ xwin --accept-license --arch x86_64 --output ~/.xwin
 $ ln -s ~/.xwin .xwin
 $ make configure
 $ make index

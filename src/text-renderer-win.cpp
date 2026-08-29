@@ -15,6 +15,19 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
+#include "text-renderer.hpp"
+
 #include <dwrite.h>
+#include <memory>
 
 class glyph_collector : public IDWriteTextRenderer {};
+
+std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
+{
+	return nullptr;
+}
+
+double suggest_colon_offset_ratio(const clock_style &style)
+{
+	return 0;
+}
