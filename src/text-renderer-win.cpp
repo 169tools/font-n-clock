@@ -161,7 +161,7 @@ public:
 			glyphs.push_back({
 				.index = run->glyphIndices[i],
 				.x = cursor + offset.advanceOffset,
-				.y = baseline_y - offset.ascenderOffset,
+				.y = offset.ascenderOffset,
 			});
 			cursor += run->glyphAdvances[i];
 		}
@@ -262,7 +262,7 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 		}
 
 		const double origin_x = collected.glyphs[i].x;
-		const double origin_y = -collected.glyphs[i].y;
+		const double origin_y = collected.glyphs[i].y;
 		const double l = origin_x + left * scale;
 		const double r = origin_x + right * scale;
 		const double b = origin_y + bottom * scale;
