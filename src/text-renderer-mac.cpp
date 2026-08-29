@@ -46,7 +46,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
-#include <libobs/util/base.h>
 #include <memory>
 #include <optional>
 #include <string>
@@ -368,11 +367,6 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->time_tracking_em = style.tracking_em;
 	clock->space = std::move(space);
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
-
-	blog(LOG_INFO, "[ref] pt=%.6f/%.6f frame=%ux%u ref_w=%.6f date=%.6f time=%.6f mer=%.6f", caption_point_size,
-	     time_point_size, clock->frame.width, clock->frame.height, clock->frame.reference_width,
-	     clock->frame.date_baseline_y, clock->frame.time_baseline_y, clock->frame.meridiem_baseline_y);
-
 	return clock;
 }
 

@@ -15,32 +15,24 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
+
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#include <util/base.h>
 #include <util/windows/ComPtr.hpp>
 
 #include "layout.hpp"
 #include "text-renderer.hpp"
 
-#include <Unknwnbase.h>
-#include <WinNls.h>
 #include <algorithm>
 #include <array>
-#include <basetsd.h>
 #include <cstddef>
 #include <cstdint>
-#include <dcommon.h>
 #include <dwrite.h>
 #include <memory>
-#include <minwindef.h>
 #include <optional>
 #include <string>
-#include <stringapiset.h>
 #include <vector>
-#include <winerror.h>
-#include <winnt.h>
 
 constexpr float layout_limit = 1 << 20;
 
@@ -144,27 +136,35 @@ struct glyph_position {
 	double y = 0;
 };
 
+struct glyph_run {
+	ComPtr<IDWriteFontFace> face;
+	std::vector<glyph_position> glyphs;
+};
+
 class glyph_collector : public IDWriteTextRenderer {
 public:
-	std::vector<glyph_position> glyphs;
-	ComPtr<IDWriteFontFace> face;
+	std::vector<glyph_run> runs;
 
-	HRESULT STDMETHODCALLTYPE DrawGlyphRun(void *, FLOAT baseline_x, FLOAT baseline_y, DWRITE_MEASURING_MODE,
+	HRESULT STDMETHODCALLTYPE DrawGlyphRun(void *, FLOAT baseline_x, FLOAT, DWRITE_MEASURING_MODE,
 					       const DWRITE_GLYPH_RUN *run, const DWRITE_GLYPH_RUN_DESCRIPTION *,
 					       IUnknown *) noexcept override
 	{
-		face = run->fontFace;
+		glyph_run collected;
+		collected.face = run->fontFace;
+		collected.glyphs.reserve(run->glyphCount);
+
 		double cursor = baseline_x;
 		for (UINT32 i = 0; i < run->glyphCount; ++i) {
 			const DWRITE_GLYPH_OFFSET offset = run->glyphOffsets ? run->glyphOffsets[i]
 									     : DWRITE_GLYPH_OFFSET{};
-			glyphs.push_back({
+			collected.glyphs.push_back({
 				.index = run->glyphIndices[i],
 				.x = cursor + offset.advanceOffset,
 				.y = offset.ascenderOffset,
 			});
 			cursor += run->glyphAdvances[i];
 		}
+		runs.push_back(std::move(collected));
 		return S_OK;
 	}
 
@@ -221,70 +221,73 @@ public:
 
 ink_extents measure_glyphs(const glyph_collector &collected, const double em_size)
 {
-	if (collected.glyphs.empty() || !collected.face) {
-		return {};
-	}
-
-	std::vector<std::uint16_t> indices;
-	indices.reserve(collected.glyphs.size());
-	for (const glyph_position &glyph : collected.glyphs) {
-		indices.push_back(glyph.index);
-	}
-
-	std::vector<DWRITE_GLYPH_METRICS> metrics(indices.size());
-	if (FAILED(collected.face->GetDesignGlyphMetrics(indices.data(), static_cast<UINT32>(indices.size()),
-							 metrics.data(), FALSE))) {
-		return {};
-	}
-
-	DWRITE_FONT_METRICS font_metrics = {};
-	collected.face->GetMetrics(&font_metrics);
-	if (font_metrics.designUnitsPerEm == 0) {
-		return {};
-	}
-	const double scale = em_size / font_metrics.designUnitsPerEm;
-
 	double min_x = 0;
 	double max_x = 0;
 	double min_y = 0;
 	double max_y = 0;
 	bool any = false;
 
-	for (std::size_t i = 0; i < indices.size(); ++i) {
-		const DWRITE_GLYPH_METRICS &m = metrics[i];
-
-		const double left = m.leftSideBearing;
-		const double right = static_cast<double>(m.advanceWidth) - m.rightSideBearing;
-		const double top = static_cast<double>(m.verticalOriginY) - m.topSideBearing;
-		const double bottom = m.verticalOriginY - (static_cast<double>(m.advanceHeight) - m.bottomSideBearing);
-		if (right <= left && top <= bottom) {
+	for (const glyph_run &run : collected.runs) {
+		if (run.glyphs.empty() || !run.face) {
 			continue;
 		}
 
-		const double origin_x = collected.glyphs[i].x;
-		const double origin_y = collected.glyphs[i].y;
-		const double l = origin_x + left * scale;
-		const double r = origin_x + right * scale;
-		const double b = origin_y + bottom * scale;
-		const double t = origin_y + top * scale;
+		std::vector<std::uint16_t> indices;
+		indices.reserve(run.glyphs.size());
+		for (const glyph_position &glyph : run.glyphs) {
+			indices.push_back(glyph.index);
+		}
 
-		if (!any) {
-			min_x = l;
-			max_x = r;
-			min_y = b;
-			max_y = t;
-			any = true;
-		} else {
-			min_x = std::min(min_x, l);
-			max_x = std::max(max_x, r);
-			min_y = std::min(min_y, b);
-			max_y = std::max(max_y, t);
+		std::vector<DWRITE_GLYPH_METRICS> metrics(indices.size());
+		if (FAILED(run.face->GetDesignGlyphMetrics(indices.data(), static_cast<UINT32>(indices.size()),
+							   metrics.data(), FALSE))) {
+			return {};
+		}
+
+		DWRITE_FONT_METRICS font_metrics = {};
+		run.face->GetMetrics(&font_metrics);
+		if (font_metrics.designUnitsPerEm == 0) {
+			return {};
+		}
+		const double scale = em_size / font_metrics.designUnitsPerEm;
+
+		for (std::size_t i = 0; i < indices.size(); ++i) {
+			const DWRITE_GLYPH_METRICS &m = metrics[i];
+
+			const double left = m.leftSideBearing;
+			const double right = static_cast<double>(m.advanceWidth) - m.rightSideBearing;
+			const double top = static_cast<double>(m.verticalOriginY) - m.topSideBearing;
+			const double bottom =
+				m.verticalOriginY - (static_cast<double>(m.advanceHeight) - m.bottomSideBearing);
+			if (right <= left && top <= bottom) {
+				continue;
+			}
+
+			const double origin_x = run.glyphs[i].x;
+			const double origin_y = run.glyphs[i].y;
+			const double l = origin_x + left * scale;
+			const double r = origin_x + right * scale;
+			const double b = origin_y + bottom * scale;
+			const double t = origin_y + top * scale;
+
+			if (!any) {
+				min_x = l;
+				max_x = r;
+				min_y = b;
+				max_y = t;
+				any = true;
+			} else {
+				min_x = std::min(min_x, l);
+				max_x = std::max(max_x, r);
+				min_y = std::min(min_y, b);
+				max_y = std::max(max_y, t);
+			}
 		}
 	}
+
 	if (!any) {
 		return {};
 	}
-
 	return {.width = max_x - min_x, .ascent = max_y, .descent = -min_y, .left = min_x};
 }
 
@@ -310,8 +313,6 @@ public:
 		if (FAILED(layout->Draw(nullptr, &collector, 0, 0))) {
 			return std::nullopt;
 		}
-
-		const HRESULT hr = layout->Draw(nullptr, &collector, 0, 0);
 		return measure_glyphs(collector, em_size);
 	}
 
@@ -342,7 +343,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	ComPtr<IDWriteTextFormat> probe_format =
 		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size);
-	if (!font) {
+	if (!probe_format) {
 		return nullptr;
 	}
 
@@ -389,11 +390,6 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	auto clock = std::make_unique<win_clock>();
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
-
-	blog(LOG_INFO, "[ref] pt=%.6f/%.6f frame=%ux%u ref_w=%.6f date=%.6f time=%.6f mer=%.6f", caption_point_size,
-	     time_point_size, clock->frame.width, clock->frame.height, clock->frame.reference_width,
-	     clock->frame.date_baseline_y, clock->frame.time_baseline_y, clock->frame.meridiem_baseline_y);
-
 	return clock;
 }
 
@@ -412,7 +408,7 @@ double suggest_colon_offset_ratio(const clock_style &style)
 		return 0;
 	}
 	ComPtr<IDWriteTextFormat> probe_format =
-		make_format(factory.Get(), font.Get(), style.font_style, reference_point_size);
+		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size);
 	if (!probe_format) {
 		return 0;
 	}
