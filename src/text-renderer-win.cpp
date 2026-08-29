@@ -42,7 +42,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <winerror.h>
 #include <winnt.h>
 
-constexpr float layout_limit = 1 << 20; // これは何
+constexpr float layout_limit = 1 << 20;
 
 std::wstring to_wide(const std::string &value)
 {
@@ -53,13 +53,11 @@ std::wstring to_wide(const std::string &value)
 	if (length <= 0) {
 		return {};
 	}
-	// L は何？
 	std::wstring wide(static_cast<std::size_t>(length), L'\0');
 	MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), wide.data(), length);
 	return wide;
 }
 
-// factory の役割は？
 ComPtr<IDWriteFactory> make_factory()
 {
 	ComPtr<IDWriteFactory> factory;
@@ -70,7 +68,6 @@ ComPtr<IDWriteFactory> make_factory()
 	return factory;
 }
 
-// この関数はなんでこんな回りくどいことやってるの
 bool matches_face_name(IDWriteFont *font, const std::wstring &style)
 {
 	ComPtr<IDWriteLocalizedStrings> names;
@@ -142,7 +139,7 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 }
 
 struct glyph_position {
-	std::uint16_t index = 0; // ここを UINT16 にしないのは意図的？
+	std::uint16_t index = 0;
 	double x = 0;
 	double y = 0;
 };
@@ -171,9 +168,8 @@ public:
 		return S_OK;
 	}
 
-	HRESULT STDMETHODCALLTYPE
-	DrawUnderline(void *, FLOAT, FLOAT, const DWRITE_UNDERLINE *,
-		      IUnknown *) noexcept override // OBS のフォントセレクタに underline があるのってこれ由来？
+	HRESULT STDMETHODCALLTYPE DrawUnderline(void *, FLOAT, FLOAT, const DWRITE_UNDERLINE *,
+						IUnknown *) noexcept override
 	{
 		return E_NOTIMPL;
 	}
@@ -198,7 +194,7 @@ public:
 
 	HRESULT STDMETHODCALLTYPE GetCurrentTransform(void *, DWRITE_MATRIX *matrix) noexcept override
 	{
-		*matrix = {1, 0, 0, 1, 0, 0}; // これは何
+		*matrix = {1, 0, 0, 1, 0, 0};
 		return S_OK;
 	}
 
@@ -230,7 +226,7 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 	}
 
 	std::vector<std::uint16_t> indices;
-	indices.reserve(collected.glyphs.size()); // size が分かっているなら array でなく vector にする意味は？
+	indices.reserve(collected.glyphs.size());
 	for (const glyph_position &glyph : collected.glyphs) {
 		indices.push_back(glyph.index);
 	}
@@ -257,14 +253,10 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 	for (std::size_t i = 0; i < indices.size(); ++i) {
 		const DWRITE_GLYPH_METRICS &m = metrics[i];
 
-		blog(LOG_INFO, "[win] g=%u upem=%u lsb=%d aw=%u rsb=%d | tsb=%d ah=%u bsb=%d voy=%d", indices[i],
-		     font_metrics.designUnitsPerEm, m.leftSideBearing, m.advanceWidth, m.rightSideBearing,
-		     m.topSideBearing, m.advanceHeight, m.bottomSideBearing, m.verticalOriginY);
-
 		const double left = m.leftSideBearing;
-		const double right = m.advanceWidth - m.rightSideBearing; // cast 不要では？
-		const double top = m.verticalOriginY - m.topSideBearing;
-		const double bottom = m.verticalOriginY - (m.advanceHeight - m.bottomSideBearing);
+		const double right = static_cast<double>(m.advanceWidth) - m.rightSideBearing;
+		const double top = static_cast<double>(m.verticalOriginY) - m.topSideBearing;
+		const double bottom = m.verticalOriginY - (static_cast<double>(m.advanceHeight) - m.bottomSideBearing);
 		if (right <= left && top <= bottom) {
 			continue;
 		}
@@ -320,9 +312,6 @@ public:
 		}
 
 		const HRESULT hr = layout->Draw(nullptr, &collector, 0, 0);
-		blog(LOG_INFO, "[win] measure '%s' hr=0x%08lx glyphs=%zu face=%p", text.c_str(), hr,
-		     collector.glyphs.size(), static_cast<void *>(collector.face.Get()));
-
 		return measure_glyphs(collector, em_size);
 	}
 
@@ -341,25 +330,19 @@ public:
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
-	blog(LOG_INFO, "[win] prepare_clock face='%s' style='%s' size=%f", style.font_face.c_str(),
-	     style.font_style.c_str(), style.size);
-
 	ComPtr<IDWriteFactory> factory = make_factory();
 	if (!factory) {
-		blog(LOG_WARNING, "[win] make_factory failed");
 		return nullptr;
 	}
 
 	ComPtr<IDWriteFont> font = find_font(factory.Get(), style.font_face, style.font_style);
 	if (!font) {
-		blog(LOG_WARNING, "[win] find_font failed");
 		return nullptr;
 	}
 
 	ComPtr<IDWriteTextFormat> probe_format =
 		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size);
 	if (!font) {
-		blog(LOG_WARNING, "[win] make_format failed");
 		return nullptr;
 	}
 
@@ -369,7 +352,6 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	const double caption_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
 	if (caption_point_size <= 0 || time_point_size <= 0) {
-		blog(LOG_WARNING, "[win] solve_point_size failed");
 		return nullptr;
 	}
 
@@ -378,7 +360,6 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	ComPtr<IDWriteTextFormat> time_format =
 		make_format(factory.Get(), font.Get(), style.font_face, time_point_size);
 	if (!caption_format || !time_format) {
-		blog(LOG_WARNING, "[win] make_format failed");
 		return nullptr;
 	}
 
@@ -387,7 +368,6 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	const row_extents time_extents = time_reference_extents(time_measurer, style.twelve_hour);
 	if (time_extents.width <= 0) {
-		blog(LOG_WARNING, "[win] time_reference_extents failed");
 		return nullptr;
 	}
 
@@ -395,7 +375,6 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	if (style.twelve_hour) {
 		meridiem_extents = meridiem_reference_extents(caption_measurer);
 		if (meridiem_extents->width <= 0) {
-			blog(LOG_WARNING, "[win] meridiem_reference_extents failed");
 			return nullptr;
 		}
 	}
@@ -404,7 +383,6 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	if (style.format != date_format::none) {
 		date_extents = date_reference_extents(caption_measurer, style.format);
 		if (date_extents->width <= 0) {
-			blog(LOG_WARNING, "[win] date_reference_extents failed");
 			return nullptr;
 		}
 	}
