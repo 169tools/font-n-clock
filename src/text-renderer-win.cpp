@@ -54,7 +54,7 @@ std::wstring to_wide(const std::string &value)
 		return {};
 	}
 	// L は何？
-	std::wstring wide(static_cast<std::size_t>(length), L'0');
+	std::wstring wide(static_cast<std::size_t>(length), L'\0');
 	MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), wide.data(), length);
 	return wide;
 }
@@ -83,7 +83,7 @@ bool matches_face_name(IDWriteFont *font, const std::wstring &style)
 		if (FAILED(names->GetStringLength(i, &length))) {
 			continue;
 		}
-		std::wstring name(static_cast<std::size_t>(length) + 1, L'0');
+		std::wstring name(static_cast<std::size_t>(length) + 1, L'\0');
 		if (FAILED(names->GetString(i, name.data(), length + 1))) {
 			continue;
 		}
@@ -264,13 +264,13 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 		const double left = m.leftSideBearing;
 		const double right = m.advanceWidth - m.rightSideBearing; // cast 不要では？
 		const double top = m.verticalOriginY - m.topSideBearing;
-		const double bottom = m.verticalOriginY - m.advanceHeight - m.bottomSideBearing;
+		const double bottom = m.verticalOriginY - (m.advanceHeight - m.bottomSideBearing);
 		if (right <= left && top <= bottom) {
 			continue;
 		}
 
 		const double origin_x = collected.glyphs[i].x;
-		const double origin_y = collected.glyphs[i].y;
+		const double origin_y = -collected.glyphs[i].y;
 		const double l = origin_x + left * scale;
 		const double r = origin_x + right * scale;
 		const double b = origin_y + bottom * scale;
@@ -286,7 +286,7 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 			min_x = std::min(min_x, l);
 			max_x = std::max(max_x, r);
 			min_y = std::min(min_y, b);
-			max_y = std::max(max_x, t);
+			max_y = std::max(max_y, t);
 		}
 	}
 	if (!any) {
