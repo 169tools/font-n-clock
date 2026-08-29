@@ -286,17 +286,17 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected, cons
 	}
 
 	if (!any) {
-		return std::nullopt;
+		return ink_extents{};
 	}
 	return ink_extents{.width = max_x - min_x, .ascent = max_y, .descent = -min_y, .left = min_x};
 }
 
 class dw_measurer : public text_measurer {
 public:
-	dw_measurer(IDWriteFactory *factory, IDWriteTextFormat *format, const double em_size)
+	dw_measurer(IDWriteFactory *factory, IDWriteTextFormat *format)
 		: factory(factory),
 		  format(format),
-		  em_size(em_size)
+		  em_size(format->GetFontSize())
 	{
 	}
 
@@ -347,8 +347,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const std::array<ink_extents, 10> probe_digits =
-		digit_extents(dw_measurer(factory.Get(), probe_format.Get(), reference_point_size));
+	const std::array<ink_extents, 10> probe_digits = digit_extents(dw_measurer(factory.Get(), probe_format.Get()));
 
 	const double caption_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
@@ -364,8 +363,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const dw_measurer caption_measurer(factory.Get(), caption_format.Get(), caption_point_size);
-	const dw_measurer time_measurer(factory.Get(), time_format.Get(), time_point_size);
+	const dw_measurer caption_measurer(factory.Get(), caption_format.Get());
+	const dw_measurer time_measurer(factory.Get(), time_format.Get());
 
 	const row_extents time_extents = time_reference_extents(time_measurer, style.twelve_hour);
 	if (time_extents.width <= 0) {
@@ -413,7 +412,7 @@ double suggest_colon_offset_ratio(const clock_style &style)
 		return 0;
 	}
 
-	const dw_measurer probe_measurer(factory.Get(), probe_format.Get(), reference_point_size);
+	const dw_measurer probe_measurer(factory.Get(), probe_format.Get());
 	const ink_span digits = digit_envelope(digit_extents(probe_measurer));
 	if (digits.height() <= 0) {
 		return 0;
