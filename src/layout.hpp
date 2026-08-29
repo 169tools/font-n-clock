@@ -21,11 +21,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "text-renderer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string>
 
+inline constexpr double reference_point_size = 100;
 inline constexpr double colon_optional_offset_ratio = 0.02;
 inline constexpr double negative_infinity = -std::numeric_limits<double>::infinity();
 
@@ -76,6 +79,23 @@ struct shadow_style {
 	double offset = 0;
 	double blur = 0;
 };
+
+class text_measurer {
+public:
+	virtual ~text_measurer() = default;
+	virtual std::optional<ink_extents> measure(const std::string &text) const = 0;
+
+protected:
+	text_measurer() = default;
+};
+
+std::array<ink_extents, 10> digit_extents(const text_measurer &measurer);
+ink_span digit_envelope(const std::array<ink_extents, 10> &digits);
+double solve_point_size(const std::array<ink_extents, 10> &digits, double target_height);
+
+row_extents date_reference_extents(const text_measurer &measurer, const date_format format);
+row_extents time_reference_extents(const text_measurer &measurer, bool twelve_hour);
+row_extents meridiem_reference_extents(const text_measurer &measurer);
 
 inline clock_frame solve_frame(const clock_style &style, const std::optional<row_extents> &date,
 			       const row_extents &time, const std::optional<row_extents> &meridiem)
