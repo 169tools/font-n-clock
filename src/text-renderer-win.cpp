@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <cmath>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -130,15 +131,13 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 	return format;
 }
 
-struct glyph_position {
-	std::uint16_t index = 0;
-	double x = 0;
-	double y = 0;
-};
-
 struct glyph_run {
 	ComPtr<IDWriteFontFace> face;
-	std::vector<glyph_position> glyphs;
+	float em_size = 0;
+	float baseline_x = 0;
+	std::vector<std::uint16_t> indices;
+	std::vector<float> advances;
+	std::vector<DWRITE_GLYPH_OFFSET> offsets;
 };
 
 class glyph_collector : public IDWriteTextRenderer {
@@ -151,18 +150,14 @@ public:
 	{
 		glyph_run collected;
 		collected.face = run->fontFace;
-		collected.glyphs.reserve(run->glyphCount);
-
-		double cursor = baseline_x;
-		for (UINT32 i = 0; i < run->glyphCount; ++i) {
-			const DWRITE_GLYPH_OFFSET offset = run->glyphOffsets ? run->glyphOffsets[i]
-									     : DWRITE_GLYPH_OFFSET{};
-			collected.glyphs.push_back({
-				.index = run->glyphIndices[i],
-				.x = cursor + offset.advanceOffset,
-				.y = offset.ascenderOffset,
-			});
-			cursor += run->glyphAdvances[i];
+		collected.em_size = run->fontEmSize;
+		collected.baseline_x = baseline_x;
+		collected.indices.assign(run->glyphIndices, run->glyphIndices + run->glyphCount);
+		collected.advances.assign(run->glyphAdvances, run->glyphAdvances + run->glyphCount);
+		if (run->glyphOffsets) {
+			collected.offsets.assign(run->glyphOffsets, run->glyphOffsets + run->glyphCount);
+		} else {
+			collected.offsets.resize(run->glyphCount);
 		}
 		runs.push_back(std::move(collected));
 		return S_OK;
@@ -219,7 +214,7 @@ public:
 	}
 };
 
-std::optional<ink_extents> measure_glyphs(const glyph_collector &collected, const double em_size)
+std::optional<ink_extents> measure_glyphs(const glyph_collector &collected)
 {
 	double min_x = 0;
 	double max_x = 0;
@@ -228,18 +223,12 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected, cons
 	bool any = false;
 
 	for (const glyph_run &run : collected.runs) {
-		if (run.glyphs.empty() || !run.face) {
+		if (run.indices.empty() || !run.face) {
 			continue;
 		}
 
-		std::vector<std::uint16_t> indices;
-		indices.reserve(run.glyphs.size());
-		for (const glyph_position &glyph : run.glyphs) {
-			indices.push_back(glyph.index);
-		}
-
-		std::vector<DWRITE_GLYPH_METRICS> metrics(indices.size());
-		if (FAILED(run.face->GetDesignGlyphMetrics(indices.data(), static_cast<UINT32>(indices.size()),
+		std::vector<DWRITE_GLYPH_METRICS> metrics(run.indices.size());
+		if (FAILED(run.face->GetDesignGlyphMetrics(run.indices.data(), static_cast<UINT32>(run.indices.size()),
 							   metrics.data(), FALSE))) {
 			return std::nullopt;
 		}
@@ -249,9 +238,10 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected, cons
 		if (font_metrics.designUnitsPerEm == 0) {
 			return std::nullopt;
 		}
-		const double scale = em_size / font_metrics.designUnitsPerEm;
+		const double scale = run.em_size / font_metrics.designUnitsPerEm;
 
-		for (std::size_t i = 0; i < indices.size(); ++i) {
+		double cursor = run.baseline_x;
+		for (std::size_t i = 0; i < run.indices.size(); ++i) {
 			const DWRITE_GLYPH_METRICS &m = metrics[i];
 
 			const double left = m.leftSideBearing;
@@ -263,8 +253,9 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected, cons
 				continue;
 			}
 
-			const double origin_x = run.glyphs[i].x;
-			const double origin_y = run.glyphs[i].y;
+			const double origin_x = cursor + run.offsets[i].advanceOffset;
+			const double origin_y = run.offsets[i].ascenderOffset;
+			cursor += run.advances[i];
 			const double l = origin_x + left * scale;
 			const double r = origin_x + right * scale;
 			const double b = origin_y + bottom * scale;
@@ -291,42 +282,167 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected, cons
 	return ink_extents{.width = max_x - min_x, .ascent = max_y, .descent = -min_y, .left = min_x};
 }
 
+bool collect_glyphs(IDWriteFactory *factory, IDWriteTextFormat *format, const std::string &text,
+		    glyph_collector &collector)
+{
+	const std::wstring wide = to_wide(text);
+	ComPtr<IDWriteTextLayout> layout;
+	if (FAILED(factory->CreateTextLayout(wide.c_str(), static_cast<UINT32>(wide.size()), format, layout_limit,
+					     layout_limit, &layout))) {
+		return false;
+	}
+	return SUCCEEDED(layout->Draw(nullptr, &collector, 0, 0));
+}
+
 class dw_measurer : public text_measurer {
 public:
-	dw_measurer(IDWriteFactory *factory, IDWriteTextFormat *format)
-		: factory(factory),
-		  format(format),
-		  em_size(format->GetFontSize())
-	{
-	}
+	dw_measurer(IDWriteFactory *factory, IDWriteTextFormat *format) : factory(factory), format(format) {}
 
 	std::optional<ink_extents> measure(const std::string &text) const override
 	{
-		const std::wstring wide = to_wide(text);
-		ComPtr<IDWriteTextLayout> layout;
-		if (FAILED(factory->CreateTextLayout(wide.c_str(), static_cast<UINT32>(wide.size()), format,
-						     layout_limit, layout_limit, &layout))) {
-			return std::nullopt;
-		}
-
 		glyph_collector collector;
-		if (FAILED(layout->Draw(nullptr, &collector, 0, 0))) {
+		if (!collect_glyphs(factory, format, text, collector)) {
 			return std::nullopt;
 		}
-		return measure_glyphs(collector, em_size);
+		return measure_glyphs(collector);
 	}
 
 private:
 	IDWriteFactory *factory = nullptr;
 	IDWriteTextFormat *format = nullptr;
-	double em_size = 0;
 };
 
 class win_clock : public prepared_clock {
 public:
+	ComPtr<IDWriteFactory> factory;
+	ComPtr<IDWriteTextFormat> caption_format;
+	ComPtr<IDWriteTextFormat> time_format;
+	double color_rgb[3] = {1, 1, 1};
+	double color_alpha = 1;
 	clock_frame frame;
 
-	rendered_text render(const clock_content &) const override { return {}; }
+	rendered_text render(const clock_content &content) const override
+	{
+		rendered_text result = {.width = frame.width, .height = frame.height};
+		result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
+
+		if (!content.date.empty() &&
+		    !draw_centered(result, content.date, caption_format.Get(), frame.date_baseline_y)) {
+			return {};
+		}
+		if (!draw_centered(result, content.time, time_format.Get(), frame.time_baseline_y)) {
+			return {};
+		}
+		if (!content.meridiem.empty() &&
+		    !draw_centered(result, content.meridiem, caption_format.Get(), frame.meridiem_baseline_y)) {
+			return {};
+		}
+		return result;
+	}
+
+private:
+	bool draw_centered(rendered_text &target, const std::string &text, IDWriteTextFormat *format,
+			   const double baseline_y) const
+	{
+		glyph_collector collector;
+		if (!collect_glyphs(factory.Get(), format, text, collector)) {
+			return false;
+		}
+
+		const std::optional<ink_extents> ink = measure_glyphs(collector);
+		if (!ink) {
+			return false;
+		}
+
+		const double origin_x = (frame.reference_width - ink->width) / 2 - ink->left;
+		const double device_y = static_cast<double>(target.height) - baseline_y;
+
+		for (const glyph_run &run : collector.runs) {
+			if (run.indices.empty() || !run.face) {
+				continue;
+			}
+			if (!draw_run(target, run, origin_x, device_y)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool draw_run(rendered_text &target, const glyph_run &run, const double origin_x, const double device_y) const
+	{
+		DWRITE_GLYPH_RUN dwrite_run = {};
+		dwrite_run.fontFace = run.face.Get();
+		dwrite_run.fontEmSize = run.em_size;
+		dwrite_run.glyphCount = static_cast<UINT32>(run.indices.size());
+		dwrite_run.glyphIndices = run.indices.data();
+		dwrite_run.glyphAdvances = run.advances.data();
+		dwrite_run.glyphOffsets = run.offsets.data();
+
+		ComPtr<IDWriteGlyphRunAnalysis> analysis;
+		if (FAILED(factory->CreateGlyphRunAnalysis(
+			    &dwrite_run, 1.0f, nullptr, DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
+			    DWRITE_MEASURING_MODE_NATURAL, static_cast<FLOAT>(run.baseline_x + origin_x),
+			    static_cast<FLOAT>(device_y), &analysis))) {
+			return false;
+		}
+
+		RECT bounds = {};
+		if (FAILED(analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds))) {
+			return false;
+		}
+
+		const long texture_width = bounds.right - bounds.left;
+		const long texture_height = bounds.bottom - bounds.top;
+		if (texture_width <= 0 || texture_height <= 0) {
+			return true;
+		}
+
+		std::vector<std::uint8_t> alpha(static_cast<std::size_t>(texture_width) * texture_height * 3);
+		if (FAILED(analysis->CreateAlphaTexture(DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds, alpha.data(),
+							static_cast<UINT32>(alpha.size())))) {
+			return false;
+		}
+
+		for (long y = 0; y < texture_height; ++y) {
+			const long target_y = bounds.top + y;
+			if (target_y < 0 || target_y >= static_cast<long>(target.height)) {
+				continue;
+			}
+			for (long x = 0; x < texture_width; ++x) {
+				const long target_x = bounds.left + x;
+				if (target_x < 0 || target_x >= static_cast<long>(target.width)) {
+					continue;
+				}
+
+				const std::size_t source = (static_cast<std::size_t>(y) * texture_width + x) * 3;
+				const double coverage =
+					(alpha[source] + alpha[source + 1] + alpha[source + 2]) / (3.0 * 255.0);
+				if (coverage <= 0) {
+					continue;
+				}
+				blend_pixel(target, target_x, target_y, coverage);
+			}
+		}
+		return true;
+	}
+
+	void blend_pixel(rendered_text &target, const long x, const long y, const double coverage) const
+	{
+		const double a = coverage * color_alpha;
+		const double inverse = 1.0 - a;
+		const std::size_t pixel = (static_cast<std::size_t>(y) * target.width + x) * 4;
+
+		for (int channel = 0; channel < 3; ++channel) {
+			const double blended =
+				color_rgb[channel] * a + target.pixels[pixel + channel] / 255.0 * inverse;
+			target.pixels[pixel + channel] =
+				static_cast<std::uint8_t>(std::clamp(std::lround(blended * 255), 0L, 255L));
+		}
+		const double blended_alpha = a + target.pixels[pixel + 3] / 255.0 * inverse;
+		target.pixels[pixel + 3] =
+			static_cast<std::uint8_t>(std::clamp(std::lround(blended_alpha * 255), 0L, 255L));
+	}
 };
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
@@ -388,6 +504,13 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	auto clock = std::make_unique<win_clock>();
+	clock->factory = std::move(factory);
+	clock->caption_format = std::move(caption_format);
+	clock->time_format = std::move(time_format);
+	clock->color_rgb[0] = static_cast<double>(style.color & 0xff) / 255.0;
+	clock->color_rgb[1] = static_cast<double>((style.color >> 8) & 0xff) / 255.0;
+	clock->color_rgb[2] = static_cast<double>((style.color >> 16) & 0xff) / 255.0;
+	clock->color_alpha = static_cast<double>((style.color >> 24) & 0xff) / 255.0;
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
 	return clock;
 }
