@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <cstdint>
+#include <vector>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -27,12 +29,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <WinNls.h>
 #include <basetsd.h>
 #include <cstddef>
+#include <dcommon.h>
 #include <dwrite.h>
 #include <memory>
 #include <minwindef.h>
 #include <string>
 #include <stringapiset.h>
 #include <winerror.h>
+#include <winnt.h>
 
 constexpr float layout_limit = 1 << 20;
 
@@ -133,7 +137,87 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 	return format;
 }
 
-class glyph_collector : public IDWriteTextRenderer {};
+struct glyph_position {
+	std::uint16_t index = 0; // ここを UINT16 にしないのは意図的？
+	double x = 0;
+	double y = 0;
+};
+
+class glyph_collector : public IDWriteTextRenderer {
+public:
+	std::vector<glyph_position> glyphs;
+	ComPtr<IDWriteFontFace> face;
+
+	HRESULT STDMETHODCALLTYPE DrawGlyphRun(void *, FLOAT baseline_x, FLOAT baseline_y, DWRITE_MEASURING_MODE,
+					       const DWRITE_GLYPH_RUN *run, const DWRITE_GLYPH_RUN_DESCRIPTION *,
+					       IUnknown *) noexcept override
+	{
+		face = run->fontFace;
+		double cursor = baseline_x;
+		for (UINT32 i = 0; i < run->glyphCount; ++i) {
+			const DWRITE_GLYPH_OFFSET offset = run->glyphOffsets ? run->glyphOffsets[i]
+									     : DWRITE_GLYPH_OFFSET{};
+			glyphs.push_back({
+				.index = run->glyphIndices[i],
+				.x = cursor + offset.advanceOffset,
+				.y = baseline_y - offset.ascenderOffset,
+			});
+			cursor += run->glyphAdvances[i];
+		}
+		return S_OK;
+	}
+
+	HRESULT STDMETHODCALLTYPE
+	DrawUnderline(void *, FLOAT, FLOAT, const DWRITE_UNDERLINE *,
+		      IUnknown *) noexcept override // OBS のフォントセレクタに underline があるのってこれ由来？
+	{
+		return E_NOTIMPL;
+	}
+
+	HRESULT STDMETHODCALLTYPE DrawStrikethrough(void *, FLOAT, FLOAT, const DWRITE_STRIKETHROUGH *,
+						    IUnknown *) noexcept override
+	{
+		return E_NOTIMPL;
+	}
+
+	HRESULT STDMETHODCALLTYPE DrawInlineObject(void *, FLOAT, FLOAT, IDWriteInlineObject *, BOOL, BOOL,
+						   IUnknown *) noexcept override
+	{
+		return E_NOTIMPL;
+	}
+
+	HRESULT STDMETHODCALLTYPE IsPixelSnappingDisabled(void *, BOOL *disabled) noexcept override
+	{
+		*disabled = true;
+		return S_OK;
+	}
+
+	HRESULT STDMETHODCALLTYPE GetCurrentTransform(void *, DWRITE_MATRIX *matrix) noexcept override
+	{
+		*matrix = {1, 0, 0, 1, 0, 0}; // これは何
+		return S_OK;
+	}
+
+	HRESULT STDMETHODCALLTYPE GetPixelsPerDip(void *, FLOAT *pixels_per_dip) noexcept override
+	{
+		*pixels_per_dip = 1.0f;
+		return S_OK;
+	}
+
+	ULONG STDMETHODCALLTYPE AddRef() noexcept override { return 1; }
+	ULONG STDMETHODCALLTYPE Release() noexcept override { return 1; }
+
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **object) noexcept override
+	{
+		if (iid == __uuidof(IUnknown) || iid == __uuidof(IDWritePixelSnapping) ||
+		    iid == __uuidof(IDWriteTextRenderer)) {
+			*object = this;
+			return S_OK;
+		}
+		*object = nullptr;
+		return E_NOINTERFACE;
+	}
+};
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
