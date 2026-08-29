@@ -1,3 +1,16 @@
 Diagnostics:
   MissingIncludes: Strict
   UnusedIncludes: Strict
+---
+If:
+  PathMatch: .*-win\.cpp
+CompileFlags:
+  Compiler: clang-cl
+  Add:
+    - --target=x86_64-pc-windows-msvc
+    - /std:c++20
+    - -imsvc../.xwin/crt/include
+    - -imsvc../.xwin/sdk/include/ucrt
+    - -imsvc../.xwin/sdk/include/um
+    - -imsvc../.xwin/sdk/include/shared
+    - -I../.deps/obs-studio-31.1.1/libobs
