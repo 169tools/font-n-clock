@@ -256,6 +256,11 @@ ink_extents measure_glyphs(const glyph_collector &collected, const double em_siz
 
 	for (std::size_t i = 0; i < indices.size(); ++i) {
 		const DWRITE_GLYPH_METRICS &m = metrics[i];
+
+		blog(LOG_INFO, "[win] g=%u upem=%u lsb=%d aw=%u rsb=%d | tsb=%d ah=%u bsb=%d voy=%d", indices[i],
+		     font_metrics.designUnitsPerEm, m.leftSideBearing, m.advanceWidth, m.rightSideBearing,
+		     m.topSideBearing, m.advanceHeight, m.bottomSideBearing, m.verticalOriginY);
+
 		const double left = m.leftSideBearing;
 		const double right = m.advanceWidth - m.rightSideBearing; // cast 不要では？
 		const double top = m.verticalOriginY - m.topSideBearing;
@@ -313,6 +318,11 @@ public:
 		if (FAILED(layout->Draw(nullptr, &collector, 0, 0))) {
 			return std::nullopt;
 		}
+
+		const HRESULT hr = layout->Draw(nullptr, &collector, 0, 0);
+		blog(LOG_INFO, "[win] measure '%s' hr=0x%08lx glyphs=%zu face=%p", text.c_str(), hr,
+		     collector.glyphs.size(), static_cast<void *>(collector.face.Get()));
+
 		return measure_glyphs(collector, em_size);
 	}
 
@@ -331,19 +341,25 @@ public:
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
+	blog(LOG_INFO, "[win] prepare_clock face='%s' style='%s' size=%f", style.font_face.c_str(),
+	     style.font_style.c_str(), style.size);
+
 	ComPtr<IDWriteFactory> factory = make_factory();
 	if (!factory) {
+		blog(LOG_WARNING, "[win] make_factory failed");
 		return nullptr;
 	}
 
 	ComPtr<IDWriteFont> font = find_font(factory.Get(), style.font_face, style.font_style);
 	if (!font) {
+		blog(LOG_WARNING, "[win] find_font failed");
 		return nullptr;
 	}
 
 	ComPtr<IDWriteTextFormat> probe_format =
 		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size);
 	if (!font) {
+		blog(LOG_WARNING, "[win] make_format failed");
 		return nullptr;
 	}
 
@@ -353,6 +369,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	const double caption_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
 	if (caption_point_size <= 0 || time_point_size <= 0) {
+		blog(LOG_WARNING, "[win] solve_point_size failed");
 		return nullptr;
 	}
 
@@ -361,6 +378,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	ComPtr<IDWriteTextFormat> time_format =
 		make_format(factory.Get(), font.Get(), style.font_face, time_point_size);
 	if (!caption_format || !time_format) {
+		blog(LOG_WARNING, "[win] make_format failed");
 		return nullptr;
 	}
 
@@ -369,6 +387,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	const row_extents time_extents = time_reference_extents(time_measurer, style.twelve_hour);
 	if (time_extents.width <= 0) {
+		blog(LOG_WARNING, "[win] time_reference_extents failed");
 		return nullptr;
 	}
 
@@ -376,6 +395,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	if (style.twelve_hour) {
 		meridiem_extents = meridiem_reference_extents(caption_measurer);
 		if (meridiem_extents->width <= 0) {
+			blog(LOG_WARNING, "[win] meridiem_reference_extents failed");
 			return nullptr;
 		}
 	}
@@ -384,12 +404,18 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	if (style.format != date_format::none) {
 		date_extents = date_reference_extents(caption_measurer, style.format);
 		if (date_extents->width <= 0) {
+			blog(LOG_WARNING, "[win] date_reference_extents failed");
 			return nullptr;
 		}
 	}
 
 	auto clock = std::make_unique<win_clock>();
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
+
+	blog(LOG_INFO, "[ref] pt=%.6f/%.6f frame=%ux%u ref_w=%.6f date=%.6f time=%.6f mer=%.6f", caption_point_size,
+	     time_point_size, clock->frame.width, clock->frame.height, clock->frame.reference_width,
+	     clock->frame.date_baseline_y, clock->frame.time_baseline_y, clock->frame.meridiem_baseline_y);
+
 	return clock;
 }
 
