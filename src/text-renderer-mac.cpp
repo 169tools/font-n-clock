@@ -289,11 +289,11 @@ class ct_measurer : public text_measurer {
 public:
 	explicit ct_measurer(const row_style &row) : row(row) {}
 
-	ink_extents measure(const std::string &text) const override
+	std::optional<ink_extents> measure(const std::string &text) const override
 	{
 		CFPtr<CTLineRef> line = make_line(text, row);
 		if (!line) {
-			return {};
+			return std::nullopt;
 		}
 		return measure_line(line.get());
 	}
@@ -380,14 +380,17 @@ double suggest_colon_offset_ratio(const clock_style &style)
 		return 0;
 	}
 
-	const ct_measurer time_measurer({.font = probe.get()});
-	const ink_span digits = digit_envelope(digit_extents(time_measurer));
+	const ct_measurer probe_measurer({.font = probe.get()});
+	const ink_span digits = digit_envelope(digit_extents(probe_measurer));
 	if (digits.height() <= 0) {
 		return 0;
 	}
 
-	const ink_extents colon_ink = time_measurer.measure(":");
+	const std::optional<ink_extents> colon_ink = probe_measurer.measure(":");
+	if (!colon_ink) {
+		return 0;
+	}
 	const double digit_center = (digits.ascent - digits.descent) / 2;
-	const double colon_center = (colon_ink.ascent - colon_ink.descent) / 2;
+	const double colon_center = (colon_ink->ascent - colon_ink->descent) / 2;
 	return (digit_center - colon_center) / digits.height() - colon_optional_offset_ratio;
 }

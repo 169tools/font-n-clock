@@ -83,7 +83,7 @@ struct shadow_style {
 class text_measurer {
 public:
 	virtual ~text_measurer() = default;
-	virtual ink_extents measure(const std::string &text) const = 0;
+	virtual std::optional<ink_extents> measure(const std::string &text) const = 0;
 
 protected:
 	text_measurer() = default;
@@ -93,7 +93,7 @@ std::array<ink_extents, 10> digit_extents(const text_measurer &measurer);
 ink_span digit_envelope(const std::array<ink_extents, 10> &digits);
 double solve_point_size(const std::array<ink_extents, 10> &digits, double target_height);
 
-row_extents date_reference_extents(const text_measurer &measurer, date_format format);
+row_extents date_reference_extents(const text_measurer &measurer, const date_format format);
 row_extents time_reference_extents(const text_measurer &measurer, bool twelve_hour);
 row_extents meridiem_reference_extents(const text_measurer &measurer);
 
