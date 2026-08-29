@@ -52,6 +52,9 @@ if(APPLE)
     ${CMAKE_PROJECT_NAME}
     PRIVATE "-framework CoreFoundation" "-framework CoreGraphics" "-framework CoreText"
   )
+elseif(WIN32)
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/text-renderer-win.cpp)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE dwrite)
 else()
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/text-renderer-stub.cpp)
 endif()
