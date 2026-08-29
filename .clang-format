@@ -60,7 +60,7 @@ ForEachMacros:
   - "HASH_ITER"
 IncludeBlocks: Regroup
 IncludeCategories:
-  - Regex: "^<(obs|util/|graphics/)"
+  - Regex: "^<(obs|util/|graphics/|Windows.h>)"
     Priority: 1
   - Regex: '^"'
     Priority: 2
