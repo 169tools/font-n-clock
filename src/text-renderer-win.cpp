@@ -20,9 +20,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <util/base.h>
 #include <util/windows/ComPtr.hpp>
 
 #include "layout.hpp"
+#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
@@ -86,6 +88,81 @@ bool matches_face_name(IDWriteFont *font, const std::wstring &style)
 	return false;
 }
 
+std::string to_utf8(const std::wstring &value)
+{
+	if (value.empty()) {
+		return {};
+	}
+	const int length = WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), nullptr, 0,
+					       nullptr, nullptr);
+	if (length <= 0) {
+		return {};
+	}
+	std::string utf8(static_cast<std::size_t>(length), '\0');
+	WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), utf8.data(), length, nullptr,
+			    nullptr);
+	return utf8;
+}
+
+// 診断用（一時）。DirectWrite が実際に持っている family 名を調べる。
+void dump_families(IDWriteFontCollection *collection)
+{
+	for (UINT32 i = 0; i < collection->GetFontFamilyCount(); ++i) {
+		ComPtr<IDWriteFontFamily> family;
+		ComPtr<IDWriteLocalizedStrings> names;
+		if (FAILED(collection->GetFontFamily(i, &family)) || FAILED(family->GetFamilyNames(&names))) {
+			continue;
+		}
+		for (UINT32 n = 0; n < names->GetCount(); ++n) {
+			UINT32 length = 0;
+			if (FAILED(names->GetStringLength(n, &length))) {
+				continue;
+			}
+			std::wstring value(static_cast<std::size_t>(length) + 1, L'\0');
+			if (FAILED(names->GetString(n, value.data(), length + 1))) {
+				continue;
+			}
+			value.resize(length);
+			if (value.find(L"YDW") == std::wstring::npos) {
+				continue;
+			}
+
+			obs_log(LOG_INFO, "[font] family[%u] '%s' fonts=%u", i, to_utf8(value).c_str(),
+				family->GetFontCount());
+			for (UINT32 f = 0; f < family->GetFontCount(); ++f) {
+				ComPtr<IDWriteFont> font;
+				ComPtr<IDWriteLocalizedStrings> faces;
+				if (FAILED(family->GetFont(f, &font)) || FAILED(font->GetFaceNames(&faces)) ||
+				    faces->GetCount() == 0) {
+					continue;
+				}
+				UINT32 face_length = 0;
+				faces->GetStringLength(0, &face_length);
+				std::wstring face_name(static_cast<std::size_t>(face_length) + 1, L'\0');
+				faces->GetString(0, face_name.data(), face_length + 1);
+				face_name.resize(face_length);
+
+				ComPtr<IDWriteLocalizedStrings> typo;
+				BOOL typo_exists = FALSE;
+				std::wstring typo_name;
+				if (SUCCEEDED(font->GetInformationalStrings(
+					    DWRITE_INFORMATIONAL_STRING_TYPOGRAPHIC_FAMILY_NAMES, &typo,
+					    &typo_exists)) &&
+				    typo_exists && typo->GetCount() > 0) {
+					UINT32 typo_length = 0;
+					typo->GetStringLength(0, &typo_length);
+					typo_name.assign(static_cast<std::size_t>(typo_length) + 1, L'\0');
+					typo->GetString(0, typo_name.data(), typo_length + 1);
+					typo_name.resize(typo_length);
+				}
+
+				obs_log(LOG_INFO, "[font]   face[%u] '%s' typo-family='%s'", f,
+					to_utf8(face_name).c_str(), to_utf8(typo_name).c_str());
+			}
+		}
+	}
+}
+
 ComPtr<IDWriteFont> find_font(IDWriteFactory *factory, const std::string &face, const std::string &style)
 {
 	ComPtr<IDWriteFontCollection> collection;
@@ -96,6 +173,13 @@ ComPtr<IDWriteFont> find_font(IDWriteFactory *factory, const std::string &face, 
 	UINT32 index = 0;
 	BOOL exists = FALSE;
 	if (FAILED(collection->FindFamilyName(to_wide(face).c_str(), &index, &exists)) || !exists) {
+		if (FAILED(collection->FindFamilyName(to_wide(face).c_str(), &index, &exists)) || !exists) {
+			obs_log(LOG_INFO, "[font] FindFamilyName failed: face='%s' style='%s'", face.c_str(),
+				style.c_str());
+			dump_families(collection.Get());
+			return nullptr;
+		}
+
 		return nullptr;
 	}
 
