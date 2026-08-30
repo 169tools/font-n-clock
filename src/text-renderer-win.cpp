@@ -24,7 +24,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <util/windows/ComPtr.hpp>
 
 #include "layout.hpp"
-#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
@@ -368,9 +367,6 @@ private:
 			}
 		}
 
-		obs_log(LOG_INFO, "[draw] '%s' ink(w=%.4f left=%.4f) origin_x=%.4f", text.c_str(), ink->width,
-			ink->left, origin_x);
-
 		return true;
 	}
 
@@ -518,9 +514,9 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->color_alpha = static_cast<double>((style.color >> 24) & 0xff) / 255.0;
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
 
-	obs_log(LOG_INFO, "[ref] pt=%.6f/%.6f frame=%ux%u ref_w=%.6f date=%.6f time=%.6f mer=%.6f", caption_point_size,
-		time_point_size, clock->frame.width, clock->frame.height, clock->frame.reference_width,
-		clock->frame.date_baseline_y, clock->frame.time_baseline_y, clock->frame.meridiem_baseline_y);
+	blog(LOG_INFO, "[ref] pt=%.6f/%.6f frame=%ux%u ref_w=%.6f date=%.6f time=%.6f mer=%.6f", caption_point_size,
+	     time_point_size, clock->frame.width, clock->frame.height, clock->frame.reference_width,
+	     clock->frame.date_baseline_y, clock->frame.time_baseline_y, clock->frame.meridiem_baseline_y);
 
 	return clock;
 }

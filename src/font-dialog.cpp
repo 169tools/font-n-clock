@@ -21,7 +21,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-frontend-api.h>
 
 #include "obs-module.h"
-#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <QDialog>
@@ -60,8 +59,6 @@ QPixmap render_preview(const QString &family, const QString &style, const date_f
 
 	const std::unique_ptr<prepared_clock> clock = prepare_clock(spec);
 	if (!clock) {
-		obs_log(LOG_WARNING, "[preview] prepare_clock failed face='%s' style='%s' size=%f",
-			spec.font_face.c_str(), spec.font_style.c_str(), spec.size);
 		return {};
 	}
 
@@ -71,8 +68,6 @@ QPixmap render_preview(const QString &family, const QString &style, const date_f
 		.meridiem = format_meridiem(sample_hour, twelve_hour),
 	});
 	if (!bitmap.valid()) {
-		obs_log(LOG_WARNING, "[preview] render failed %ux%u pixels=%zu", bitmap.width, bitmap.height,
-			bitmap.pixels.size());
 		return {};
 	}
 
