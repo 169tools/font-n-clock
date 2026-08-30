@@ -39,8 +39,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWidget>
 #include <Qt>
 #include <QtCore/qcontainerfwd.h>
-#include <QtCore/qobject.h>
-#include <QtGui/qfontdatabase.h>
 
 #include <memory>
 #include <string>
