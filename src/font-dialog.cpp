@@ -33,6 +33,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QLatin1Char>
 #include <QListWidget>
 #include <QObject>
+#include <QOverload>
 #include <QPixmap>
 #include <QStringLiteral>
 #include <QTimer>
@@ -186,7 +187,7 @@ bool select_font(std::string &face, std::string &style, const date_format format
 
 	auto *debounce = new QTimer(&dialog);
 	debounce->setSingleShot(true);
-	debounce->setInterval(50); // キーリピート時にプレビューを更新しないようにする
+	debounce->setInterval(100); // キーリピートなどでの連続更新を抑制する
 	QObject::connect(debounce, &QTimer::timeout, preview, refresh_preview);
 	QObject::connect(families, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
 	QObject::connect(styles, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
