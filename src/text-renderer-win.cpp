@@ -508,8 +508,10 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const row_format caption_row = {.format = std::move(caption_format),
-					.tracking_em = style.caption_tracking_em()};
+	const row_format caption_row = {
+		.format = std::move(caption_format),
+		.tracking_em = style.caption_tracking_em(),
+	};
 	const row_format time_row = {.format = std::move(time_format), .tracking_em = style.tracking_em};
 
 	const dw_measurer caption_measurer(factory.Get(), caption_row);
