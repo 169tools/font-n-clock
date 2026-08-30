@@ -35,10 +35,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QObject>
 #include <QPixmap>
 #include <QStringLiteral>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <Qt>
 #include <QtCore/qcontainerfwd.h>
+#include <QtCore/qobject.h>
+#include <QtCore/qoverload.h>
+#include <QtCore/qtimer.h>
 
 #include <memory>
 #include <string>
@@ -176,15 +180,20 @@ bool select_font(std::string &face, std::string &style, const date_format format
 		preview->setPixmap(pixmap);
 	};
 
-	QObject::connect(families, &QListWidget::currentTextChanged, preview, refresh_preview);
-	QObject::connect(styles, &QListWidget::currentTextChanged, preview, refresh_preview);
-
 	const auto current = families->findItems(QString::fromStdString(face), Qt::MatchExactly);
 	if (!current.isEmpty()) {
 		families->setCurrentItem(current.first());
 	} else if (families->count() > 0) {
 		families->setCurrentRow(0);
 	}
+
+	auto *debounce = new QTimer(&dialog);
+	debounce->setSingleShot(true);
+	debounce->setInterval(50); // キーリピート時にプレビューを更新しないようにする
+	QObject::connect(debounce, &QTimer::timeout, preview, refresh_preview);
+	QObject::connect(families, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
+	QObject::connect(styles, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
+	refresh_preview();
 
 	if (dialog.exec() != QDialog::Accepted) {
 		return false;
