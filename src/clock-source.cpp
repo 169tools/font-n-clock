@@ -23,20 +23,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-properties.h>
 #include <obs-source.h>
 #include <obs.h>
-#include <util/base.h>
 
 #include "font-dialog.hpp"
-#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <memory>
-#include <ratio>
 #include <string>
 #include <utility>
 
@@ -202,8 +198,6 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto colon_offset_percent =
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 
-	const auto start = std::chrono::steady_clock::now();
-
 	context->clock = prepare_clock({
 		.format = format,
 		.twelve_hour = twelve_hour,
@@ -215,9 +209,6 @@ void clock_source_update(void *data, obs_data_t *settings)
 		.color = color,
 		.shadow = shadow,
 	});
-
-	obs_log(LOG_INFO, "[perf] prepare_clock %.2f ms",
-		std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
 
 	context->format = format;
 	context->twelve_hour = twelve_hour;
