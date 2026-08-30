@@ -41,6 +41,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <Qt>
 #include <QtCore/qcontainerfwd.h>
 #include <QtCore/qobject.h>
+#include <QtGui/qfontdatabase.h>
 
 #include <memory>
 #include <string>
@@ -90,6 +91,21 @@ QString pick_default_style(const QStringList &styles)
 	return styles.isEmpty() ? QString() : styles.first();
 }
 
+bool is_style_alias(const QString &family, const QStringList &all)
+{
+	for (int separator = family.indexOf(QLatin1Char(' ')); separator > 0;
+	     separator = family.indexOf(QLatin1Char(' '), separator + 1)) {
+		const QString base = family.left(separator);
+		if (!all.contains(base)) {
+			continue;
+		}
+		if (QFontDatabase::styles(base).contains(family.mid(separator + 1))) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool select_font(std::string &face, std::string &style, const date_format format, const bool twelve_hour)
 {
 	auto *parent = static_cast<QWidget *>(obs_frontend_get_main_window());
@@ -104,6 +120,8 @@ bool select_font(std::string &face, std::string &style, const date_format format
 	auto *families = new QListWidget(&dialog);
 	QStringList available = QFontDatabase::families();
 	available.removeIf([](const QString &family) { return family.startsWith(QLatin1Char('.')); });
+	const QStringList all = available;
+	available.removeIf([&all](const QString &family) { return is_style_alias(family, all); });
 	families->addItems(available);
 	layout->addWidget(families, 1);
 
