@@ -30,6 +30,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstddef>
 #include <cstdint>
 #include <dwrite.h>
+#include <dwrite_1.h>
 #include <memory>
 #include <optional>
 #include <string>
@@ -130,6 +131,11 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 	format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 	return format;
 }
+
+struct row_format {
+	ComPtr<IDWriteTextFormat> format;
+	double tracking_em = 0;
+};
 
 struct glyph_run {
 	ComPtr<IDWriteFontFace> face;
@@ -282,26 +288,36 @@ std::optional<ink_extents> measure_glyphs(const glyph_collector &collected)
 	return ink_extents{.width = max_x - min_x, .ascent = max_y, .descent = -min_y, .left = min_x};
 }
 
-bool collect_glyphs(IDWriteFactory *factory, IDWriteTextFormat *format, const std::string &text,
-		    glyph_collector &collector)
+bool collect_glyphs(IDWriteFactory *factory, const row_format &row, const std::string &text, glyph_collector &collector)
 {
 	const std::wstring wide = to_wide(text);
 	ComPtr<IDWriteTextLayout> layout;
-	if (FAILED(factory->CreateTextLayout(wide.c_str(), static_cast<UINT32>(wide.size()), format, layout_limit,
-					     layout_limit, &layout))) {
+	if (FAILED(factory->CreateTextLayout(wide.c_str(), static_cast<UINT32>(wide.size()), row.format.Get(),
+					     layout_limit, layout_limit, &layout))) {
 		return false;
 	}
+
+	ComPtr<IDWriteTextLayout1> spacing;
+	if (FAILED(layout->QueryInterface(__uuidof(IDWriteTextLayout1), reinterpret_cast<void **>(&spacing)))) {
+		return false;
+	}
+	const double tracking_px = row.tracking_em * row.format->GetFontSize();
+	const DWRITE_TEXT_RANGE all = {0, static_cast<UINT32>(wide.size())};
+	if (FAILED(spacing->SetCharacterSpacing(0, static_cast<FLOAT>(tracking_px), 0, all))) {
+		return false;
+	}
+
 	return SUCCEEDED(layout->Draw(nullptr, &collector, 0, 0));
 }
 
 class dw_measurer : public text_measurer {
 public:
-	dw_measurer(IDWriteFactory *factory, IDWriteTextFormat *format) : factory(factory), format(format) {}
+	dw_measurer(IDWriteFactory *factory, const row_format &row) : factory(factory), row(row) {}
 
 	std::optional<ink_extents> measure(const std::string &text) const override
 	{
 		glyph_collector collector;
-		if (!collect_glyphs(factory, format, text, collector)) {
+		if (!collect_glyphs(factory, row, text, collector)) {
 			return std::nullopt;
 		}
 		return measure_glyphs(collector);
@@ -309,14 +325,14 @@ public:
 
 private:
 	IDWriteFactory *factory = nullptr;
-	IDWriteTextFormat *format = nullptr;
+	row_format row;
 };
 
 class win_clock : public prepared_clock {
 public:
 	ComPtr<IDWriteFactory> factory;
-	ComPtr<IDWriteTextFormat> caption_format;
-	ComPtr<IDWriteTextFormat> time_format;
+	row_format caption_row;
+	row_format time_row;
 	double color_rgb[3] = {1, 1, 1};
 	double color_alpha = 1;
 	clock_frame frame;
@@ -326,26 +342,25 @@ public:
 		rendered_text result = {.width = frame.width, .height = frame.height};
 		result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
 
-		if (!content.date.empty() &&
-		    !draw_centered(result, content.date, caption_format.Get(), frame.date_baseline_y)) {
+		if (!content.date.empty() && !draw_centered(result, content.date, caption_row, frame.date_baseline_y)) {
 			return {};
 		}
-		if (!draw_centered(result, content.time, time_format.Get(), frame.time_baseline_y)) {
+		if (!draw_centered(result, content.time, time_row, frame.time_baseline_y, frame.colon_offset_px)) {
 			return {};
 		}
 		if (!content.meridiem.empty() &&
-		    !draw_centered(result, content.meridiem, caption_format.Get(), frame.meridiem_baseline_y)) {
+		    !draw_centered(result, content.meridiem, caption_row, frame.meridiem_baseline_y)) {
 			return {};
 		}
 		return result;
 	}
 
 private:
-	bool draw_centered(rendered_text &target, const std::string &text, IDWriteTextFormat *format,
-			   const double baseline_y) const
+	bool draw_centered(rendered_text &target, const std::string &text, const row_format &row,
+			   const double baseline_y, const double colon_offset_px = 0) const
 	{
 		glyph_collector collector;
-		if (!collect_glyphs(factory.Get(), format, text, collector)) {
+		if (!collect_glyphs(factory.Get(), row, text, collector)) {
 			return false;
 		}
 
@@ -361,7 +376,7 @@ private:
 			if (run.indices.empty() || !run.face) {
 				continue;
 			}
-			if (!draw_run(target, run, origin_x, device_y)) {
+			if (!draw_run(target, run, origin_x, device_y, colon_offset_px)) {
 				return false;
 			}
 		}
@@ -369,15 +384,28 @@ private:
 		return true;
 	}
 
-	bool draw_run(rendered_text &target, const glyph_run &run, const double origin_x, const double device_y) const
+	bool draw_run(rendered_text &target, const glyph_run &run, const double origin_x, const double device_y,
+		      const double colon_offset_px) const
 	{
+		std::vector<DWRITE_GLYPH_OFFSET> offsets = run.offsets;
+		if (colon_offset_px != 0) {
+			const UINT32 colon = ':';
+			UINT16 colon_glyph = 0;
+			if (SUCCEEDED(run.face->GetGlyphIndices(&colon, 1, &colon_glyph)) && colon_glyph != 0) {
+				for (std::size_t i = 0; i < run.indices.size(); ++i) {
+					if (run.indices[i] == colon_glyph) {
+						offsets[i].ascenderOffset += static_cast<FLOAT>(colon_offset_px);
+					}
+				}
+			}
+		}
 		DWRITE_GLYPH_RUN dwrite_run = {};
 		dwrite_run.fontFace = run.face.Get();
 		dwrite_run.fontEmSize = run.em_size;
 		dwrite_run.glyphCount = static_cast<UINT32>(run.indices.size());
 		dwrite_run.glyphIndices = run.indices.data();
 		dwrite_run.glyphAdvances = run.advances.data();
-		dwrite_run.glyphOffsets = run.offsets.data();
+		dwrite_run.glyphOffsets = offsets.data();
 
 		ComPtr<IDWriteGlyphRunAnalysis> analysis;
 		if (FAILED(factory->CreateGlyphRunAnalysis(
@@ -463,7 +491,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const std::array<ink_extents, 10> probe_digits = digit_extents(dw_measurer(factory.Get(), probe_format.Get()));
+	const std::array<ink_extents, 10> probe_digits =
+		digit_extents(dw_measurer(factory.Get(), {.format = probe_format}));
 
 	const double caption_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
@@ -479,8 +508,14 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const dw_measurer caption_measurer(factory.Get(), caption_format.Get());
-	const dw_measurer time_measurer(factory.Get(), time_format.Get());
+	const row_format caption_row = {
+		.format = std::move(caption_format),
+		.tracking_em = style.caption_tracking_em(),
+	};
+	const row_format time_row = {.format = std::move(time_format), .tracking_em = style.tracking_em};
+
+	const dw_measurer caption_measurer(factory.Get(), caption_row);
+	const dw_measurer time_measurer(factory.Get(), time_row);
 
 	const row_extents time_extents = time_reference_extents(time_measurer, style.twelve_hour);
 	if (time_extents.width <= 0) {
@@ -505,8 +540,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	auto clock = std::make_unique<win_clock>();
 	clock->factory = std::move(factory);
-	clock->caption_format = std::move(caption_format);
-	clock->time_format = std::move(time_format);
+	clock->caption_row = caption_row;
+	clock->time_row = time_row;
 	clock->color_rgb[0] = static_cast<double>(style.color & 0xff) / 255.0;
 	clock->color_rgb[1] = static_cast<double>((style.color >> 8) & 0xff) / 255.0;
 	clock->color_rgb[2] = static_cast<double>((style.color >> 16) & 0xff) / 255.0;
@@ -535,7 +570,7 @@ double suggest_colon_offset_ratio(const clock_style &style)
 		return 0;
 	}
 
-	const dw_measurer probe_measurer(factory.Get(), probe_format.Get());
+	const dw_measurer probe_measurer(factory.Get(), {.format = probe_format});
 	const ink_span digits = digit_envelope(digit_extents(probe_measurer));
 	if (digits.height() <= 0) {
 		return 0;
