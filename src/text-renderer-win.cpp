@@ -97,12 +97,6 @@ ComPtr<IDWriteFont> find_font(IDWriteFactory *factory, const std::string &face, 
 	UINT32 index = 0;
 	BOOL exists = FALSE;
 	if (FAILED(collection->FindFamilyName(to_wide(face).c_str(), &index, &exists)) || !exists) {
-		obs_log(LOG_WARNING, "[win] FindFamilyName error '%s'", face.c_str());
-		return nullptr;
-	}
-
-	if (!exists) {
-		obs_log(LOG_WARNING, "[win] family not found '%s'", face.c_str());
 		return nullptr;
 	}
 
@@ -458,9 +452,6 @@ private:
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
-	obs_log(LOG_INFO, "[win] prepare_clock face='%s' style='%s' size=%f", style.font_face.c_str(),
-		style.font_style.c_str(), style.size);
-
 	ComPtr<IDWriteFactory> factory = make_factory();
 	if (!factory) {
 		return nullptr;
