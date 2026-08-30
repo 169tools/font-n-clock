@@ -132,6 +132,61 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 	return format;
 }
 
+std::uint8_t to_byte(const double value)
+{
+	return static_cast<std::uint8_t>(std::clamp(std::lround(value * 255), 0L, 255L));
+}
+
+// SVG の feGaussianBlur と同じ近似。幅 d = floor(sigma * 3 * sqrt(2 * pi) / 4 + 0.5) のボックスを 3 回重ねると
+// ガウシアンに収束する。3 * sqrt(2 * pi) / 4 = 1.88。
+long box_radius(const double sigma)
+{
+	return std::max(1L, static_cast<long>(std::floor(sigma * 1.88 + 0.5)) / 2);
+}
+
+void box_blur_horizontal(const std::vector<double> &source, std::vector<double> &target, const long width,
+			 const long height, const long radius)
+{
+	const double scale = 1.0 / (radius * 2 + 1);
+	for (long y = 0; y < height; ++y) {
+		const std::size_t row = static_cast<std::size_t>(y) * width;
+		double sum = 0;
+		for (long x = 0; x <= radius && x < width; ++x) {
+			sum += source[row + x];
+		}
+		for (long x = 0; x < width; ++x) {
+			target[row + x] = sum * scale;
+			if (x + radius + 1 < width) {
+				sum += source[row + x + radius + 1];
+			}
+			if (x - radius >= 0) {
+				sum -= source[row + x - radius];
+			}
+		}
+	}
+}
+
+void box_blur_vertical(const std::vector<double> &source, std::vector<double> &target, const long width,
+		       const long height, const long radius)
+{
+	const double scale = 1.0 / (radius * 2 + 1);
+	for (long x = 0; x < width; ++x) {
+		double sum = 0;
+		for (long y = 0; y <= radius && y < height; ++y) {
+			sum += source[static_cast<std::size_t>(y) * width + x];
+		}
+		for (long y = 0; y < height; ++y) {
+			target[static_cast<std::size_t>(y) * width + x] = sum * scale;
+			if (y + radius + 1 < height) {
+				sum += source[static_cast<std::size_t>(y + radius + 1) * width + x];
+			}
+			if (y - radius >= 0) {
+				sum -= source[static_cast<std::size_t>(y - radius) * width + x];
+			}
+		}
+	}
+}
+
 struct row_format {
 	ComPtr<IDWriteTextFormat> format;
 	double tracking_em = 0;
@@ -335,6 +390,7 @@ public:
 	row_format time_row;
 	double color_rgb[3] = {1, 1, 1};
 	double color_alpha = 1;
+	std::optional<shadow_style> shadow;
 	clock_frame frame;
 
 	rendered_text render(const clock_content &content) const override
@@ -432,44 +488,74 @@ private:
 			return false;
 		}
 
-		for (long y = 0; y < texture_height; ++y) {
-			const long target_y = bounds.top + y;
-			if (target_y < 0 || target_y >= static_cast<long>(target.height)) {
-				continue;
-			}
-			for (long x = 0; x < texture_width; ++x) {
-				const long target_x = bounds.left + x;
-				if (target_x < 0 || target_x >= static_cast<long>(target.width)) {
-					continue;
-				}
+		std::vector<double> coverage(static_cast<std::size_t>(texture_width) * texture_height);
+		for (std::size_t i = 0; i < coverage.size(); ++i) {
+			coverage[i] = (alpha[i * 3] + alpha[i * 3 + 1] + alpha[i * 3 + 2]) / (3.0 * 255.0);
+		}
+		if (shadow) {
+			draw_shadow(target, coverage, texture_width, texture_height, bounds.left, bounds.top);
+		}
 
-				const std::size_t source = (static_cast<std::size_t>(y) * texture_width + x) * 3;
-				const double coverage =
-					(alpha[source] + alpha[source + 1] + alpha[source + 2]) / (3.0 * 255.0);
-				if (coverage <= 0) {
-					continue;
-				}
-				blend_pixel(target, target_x, target_y, coverage);
+		for (long y = 0; y < texture_height; ++y) {
+			for (long x = 0; x < texture_width; ++x) {
+				const std::size_t source = static_cast<std::size_t>(y) * texture_width + x;
+				blend_pixel(target, bounds.left + x, bounds.top + y, color_rgb,
+					    coverage[source] * color_alpha);
 			}
 		}
 		return true;
 	}
 
-	void blend_pixel(rendered_text &target, const long x, const long y, const double coverage) const
+	void draw_shadow(rendered_text &target, const std::vector<double> &coverage, const long width,
+			 const long height, const long left, const long top) const
 	{
-		const double a = coverage * color_alpha;
-		const double inverse = 1.0 - a;
+		constexpr int passes = 3;
+		const long radius = box_radius(shadow->blur / 2);
+		const long margin = radius * passes;
+		const long blurred_width = width + margin * 2;
+		const long blurred_height = height + margin * 2;
+
+		std::vector<double> blurred(static_cast<std::size_t>(blurred_width) * blurred_height, 0);
+		std::vector<double> scratch(blurred.size());
+		for (long y = 0; y < height; ++y) {
+			for (long x = 0; x < width; ++x) {
+				blurred[static_cast<std::size_t>(y + margin) * blurred_width + x + margin] =
+					coverage[static_cast<std::size_t>(y) * width + x];
+			}
+		}
+
+		for (int pass = 0; pass < passes; ++pass) {
+			box_blur_horizontal(blurred, scratch, blurred_width, blurred_height, radius);
+			box_blur_vertical(scratch, blurred, blurred_width, blurred_height, radius);
+		}
+
+		constexpr double black[3] = {0, 0, 0};
+		const long offset_y = std::lround(shadow->offset);
+		for (long y = 0; y < blurred_height; ++y) {
+			for (long x = 0; x < blurred_width; ++x) {
+				const std::size_t source = static_cast<std::size_t>(y) * blurred_width + x;
+				blend_pixel(target, left - margin + x, top - margin + y + offset_y, black,
+					    blurred[source] * shadow_style::opacity * color_alpha);
+			}
+		}
+	}
+
+	void blend_pixel(rendered_text &target, const long x, const long y, const double rgb[3],
+			 const double alpha) const
+	{
+		if (alpha <= 0 || x < 0 || y < 0 || x >= static_cast<long>(target.width) ||
+		    y >= static_cast<long>(target.height)) {
+			return;
+		}
+
+		const double inverse = 1.0 - alpha;
 		const std::size_t pixel = (static_cast<std::size_t>(y) * target.width + x) * 4;
 
 		for (int channel = 0; channel < 3; ++channel) {
-			const double blended =
-				color_rgb[channel] * a + target.pixels[pixel + channel] / 255.0 * inverse;
-			target.pixels[pixel + channel] =
-				static_cast<std::uint8_t>(std::clamp(std::lround(blended * 255), 0L, 255L));
+			const double blended = rgb[channel] * alpha + target.pixels[pixel + channel] / 255.0 * inverse;
+			target.pixels[pixel + channel] = to_byte(blended);
 		}
-		const double blended_alpha = a + target.pixels[pixel + 3] / 255.0 * inverse;
-		target.pixels[pixel + 3] =
-			static_cast<std::uint8_t>(std::clamp(std::lround(blended_alpha * 255), 0L, 255L));
+		target.pixels[pixel + 3] = to_byte(alpha + target.pixels[pixel + 3] / 255.0 * inverse);
 	}
 };
 
@@ -539,6 +625,9 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	auto clock = std::make_unique<win_clock>();
+	if (style.shadow) {
+		clock->shadow = shadow_style{.offset = style.shadow_offset_px(), .blur = style.shadow_blur_px()};
+	}
 	clock->factory = std::move(factory);
 	clock->caption_row = caption_row;
 	clock->time_row = time_row;
