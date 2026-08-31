@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <cmath>
+#include <numbers>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -38,6 +39,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 constexpr float layout_limit = 1 << 20;
 
+ComPtr<IDWriteFactory> make_factory()
+{
+	ComPtr<IDWriteFactory> factory;
+	if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+				       reinterpret_cast<IUnknown **>(&factory)))) {
+		return nullptr;
+	}
+	return factory;
+}
+
 std::wstring to_wide(const std::string &value)
 {
 	if (value.empty()) {
@@ -52,14 +63,52 @@ std::wstring to_wide(const std::string &value)
 	return wide;
 }
 
-ComPtr<IDWriteFactory> make_factory()
+std::string to_utf8(const std::wstring &value)
 {
-	ComPtr<IDWriteFactory> factory;
-	if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-				       reinterpret_cast<IUnknown **>(&factory)))) {
-		return nullptr;
+	if (value.empty()) {
+		return {};
 	}
-	return factory;
+	const int length = WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), nullptr, 0,
+					       nullptr, nullptr);
+	if (length <= 0) {
+		return {};
+	}
+	std::string utf8(static_cast<std::size_t>(length), '\0');
+	WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), utf8.data(), length, nullptr,
+			    nullptr);
+	return utf8;
+}
+
+std::wstring localized_name(IDWriteLocalizedStrings *names, const UINT32 index)
+{
+	UINT32 length = 0;
+	if (FAILED(names->GetStringLength(index, &length))) {
+		return {};
+	}
+	std::wstring name(static_cast<std::size_t>(length) + 1, L'\0');
+	if (FAILED(names->GetString(index, name.data(), length + 1))) {
+		return {};
+	}
+	name.resize(length);
+	return name;
+}
+
+std::wstring preferred_name(IDWriteLocalizedStrings *names)
+{
+	if (names->GetCount() == 0) {
+		return {};
+	}
+
+	UINT32 index = 0;
+	BOOL exists = false;
+	wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
+	if (GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH) > 0) {
+		names->FindLocaleName(locale, &index, &exists);
+	}
+	if (!exists) {
+		names->FindLocaleName(L"en-us", &index, &exists);
+	}
+	return localized_name(names, exists ? index : 0);
 }
 
 bool matches_face_name(IDWriteFont *font, const std::wstring &style)
@@ -637,6 +686,75 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->color_alpha = static_cast<double>((style.color >> 24) & 0xff) / 255.0;
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
 	return clock;
+}
+
+std::vector<std::string> available_font_families()
+{
+	ComPtr<IDWriteFactory> factory = make_factory();
+	if (!factory) {
+		return {};
+	}
+	ComPtr<IDWriteFontCollection> collection;
+	if (FAILED(factory->GetSystemFontCollection(&collection))) {
+		return {};
+	}
+
+	std::vector<std::string> families;
+	for (UINT32 i = 0; i < collection->GetFontFamilyCount(); ++i) {
+		ComPtr<IDWriteFontFamily> family;
+		ComPtr<IDWriteLocalizedStrings> names;
+		if (FAILED(collection->GetFontFamily(i, &family)) || FAILED(family->GetFamilyNames(&names))) {
+			continue;
+		}
+		std::string name = to_utf8(preferred_name(names.Get()));
+		if (name.empty()) {
+			continue;
+		}
+		families.push_back(std::move(name));
+	}
+	return families;
+}
+
+std::vector<std::string> available_font_styles(const std::string &face)
+{
+	ComPtr<IDWriteFactory> factory = make_factory();
+	if (!factory) {
+		return {};
+	}
+	ComPtr<IDWriteFontCollection> collection;
+	if (FAILED(factory->GetSystemFontCollection(&collection))) {
+		return {};
+	}
+
+	UINT32 index = 0;
+	BOOL exists = FALSE;
+	if (FAILED(collection->FindFamilyName(to_wide(face).c_str(), &index, &exists)) || !exists) {
+		return {};
+	}
+
+	ComPtr<IDWriteFontFamily> family;
+	if (FAILED(collection->GetFontFamily(index, &family))) {
+		return {};
+	}
+
+	std::vector<std::string> styles;
+	for (UINT32 i = 0; i < family->GetFontCount(); ++i) {
+		ComPtr<IDWriteFont> font;
+		ComPtr<IDWriteLocalizedStrings> names;
+		if (FAILED(family->GetFont(i, &font)) || FAILED(font->GetFaceNames(&names))) {
+			continue;
+		}
+		// GDI 互換のために機械的に合成された太字・斜体は除く
+		if (font->GetSimulations() != DWRITE_FONT_SIMULATIONS_NONE) {
+			continue;
+		}
+		std::string name = to_utf8(preferred_name(names.Get()));
+		if (name.empty() || std::find(styles.begin(), styles.end(), name) != styles.end()) {
+			continue;
+		}
+		styles.push_back(std::move(name));
+	}
+	return styles;
 }
 
 double suggest_colon_offset_ratio(const clock_style &style)

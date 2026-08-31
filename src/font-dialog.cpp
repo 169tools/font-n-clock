@@ -33,7 +33,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QLatin1Char>
 #include <QListWidget>
 #include <QObject>
-#include <QOverload>
 #include <QPixmap>
 #include <QStringLiteral>
 #include <QTimer>
@@ -41,6 +40,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWidget>
 #include <Qt>
 #include <QtCore/qcontainerfwd.h>
+#include <QtGlobal>
 
 #include <memory>
 #include <string>
@@ -86,21 +86,6 @@ QString pick_default_style(const QStringList &styles)
 	return styles.isEmpty() ? QString() : styles.first();
 }
 
-bool is_style_alias(const QString &family, const QStringList &all)
-{
-	for (int separator = family.indexOf(QLatin1Char(' ')); separator > 0;
-	     separator = family.indexOf(QLatin1Char(' '), separator + 1)) {
-		const QString base = family.left(separator);
-		if (!all.contains(base)) {
-			continue;
-		}
-		if (QFontDatabase::styles(base).contains(family.mid(separator + 1))) {
-			return true;
-		}
-	}
-	return false;
-}
-
 bool select_font(std::string &face, std::string &style, const date_format format, const bool twelve_hour)
 {
 	auto *parent = static_cast<QWidget *>(obs_frontend_get_main_window());
@@ -113,11 +98,10 @@ bool select_font(std::string &face, std::string &style, const date_format format
 	layout->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.Font")), &dialog));
 
 	auto *families = new QListWidget(&dialog);
-	QStringList available = QFontDatabase::families();
-	available.removeIf([](const QString &family) { return family.startsWith(QLatin1Char('.')); });
-	const QStringList all = available;
-	available.removeIf([&all](const QString &family) { return is_style_alias(family, all); });
-	families->addItems(available);
+	for (const std::string &family : available_font_families()) {
+		families->addItem(QString::fromStdString(family));
+	}
+	families->sortItems();
 	layout->addWidget(families, 1);
 
 	auto *lower = new QGridLayout;
@@ -148,7 +132,10 @@ bool select_font(std::string &face, std::string &style, const date_format format
 
 	QObject::connect(families, &QListWidget::currentTextChanged, styles,
 			 [styles, wanted_style, visible_style_rows, first_fill = true](const QString &family) mutable {
-				 const QStringList available = QFontDatabase::styles(family);
+				 QStringList available;
+				 for (const std::string &name : available_font_styles(family.toStdString())) {
+					 available.append(QString::fromStdString(name));
+				 }
 				 styles->clear();
 				 styles->addItems(available);
 
