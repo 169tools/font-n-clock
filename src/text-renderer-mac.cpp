@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreFoundation/CFCGTypes.h>
 #include <CoreFoundation/CFDictionary.h>
 #include <CoreFoundation/CFNumber.h>
+#include <CoreFoundation/CFSet.h>
 #include <CoreFoundation/CFString.h>
 #include <CoreGraphics/CGAffineTransform.h>
 #include <CoreGraphics/CGBitmapContext.h>
@@ -37,14 +38,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreGraphics/CGImage.h>
 #include <CoreText/CTFont.h>
 #include <CoreText/CTFontDescriptor.h>
+#include <CoreText/CTFontManager.h>
 #include <CoreText/CTLine.h>
 #include <CoreText/CTRun.h>
 #include <CoreText/CTStringAttributes.h>
 #include <MacTypes.h>
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <memory>
 #include <optional>
@@ -57,6 +61,20 @@ struct row_style {
 	CGColorRef color = nullptr;
 	double tracking_em = 0;
 };
+
+std::string to_utf8(CFStringRef value)
+{
+	if (!value) {
+		return {};
+	}
+	const CFIndex capacity = CFStringGetMaximumSizeForEncoding(CFStringGetLength(value), kCFStringEncodingUTF8) + 1;
+	std::string utf8(static_cast<std::size_t>(capacity), '\0');
+	if (!CFStringGetCString(value, utf8.data(), capacity, kCFStringEncodingUTF8)) {
+		return {};
+	}
+	utf8.resize(std::strlen(utf8.c_str()));
+	return utf8;
+}
 
 CFPtr<CFStringRef> make_cfstring(const std::string &value)
 {
@@ -368,6 +386,66 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->space = std::move(space);
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
 	return clock;
+}
+
+std::vector<std::string> available_font_families()
+{
+	CFPtr<CFArrayRef> names(CTFontManagerCopyAvailableFontFamilyNames());
+	if (!names) {
+		return {};
+	}
+
+	std::vector<std::string> families;
+	for (CFIndex i = 0; i < CFArrayGetCount(names.get()); ++i) {
+		std::string name = to_utf8(static_cast<CFStringRef>(CFArrayGetValueAtIndex(names.get(), i)));
+		// システム内部用のフォントも除外する
+		if (name.empty() || name.front() == '.') {
+			continue;
+		}
+		families.push_back(std::move(name));
+	}
+	return families;
+}
+
+std::vector<std::string> available_font_styles(const std::string &face)
+{
+	CFPtr<CFStringRef> family_name = make_cfstring(face);
+	if (!family_name) {
+		return {};
+	}
+
+	const void *keys[] = {kCTFontFamilyNameAttribute};
+	const void *values[] = {family_name.get()};
+	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+							     &kCFTypeDictionaryValueCallBacks));
+	if (!attributes) {
+		return {};
+	}
+
+	CFPtr<CTFontDescriptorRef> descriptor(CTFontDescriptorCreateWithAttributes(attributes.get()));
+	CFPtr<CFSetRef> mandatory(CFSetCreate(nullptr, keys, 1, &kCFTypeSetCallBacks));
+	if (!descriptor || !mandatory) {
+		return {};
+	}
+
+	CFPtr<CFArrayRef> matches(CTFontDescriptorCreateMatchingFontDescriptors(descriptor.get(), mandatory.get()));
+	if (!matches) {
+		return {};
+	}
+
+	std::vector<std::string> styles;
+	for (CFIndex i = 0; i < CFArrayGetCount(matches.get()); ++i) {
+		auto match = static_cast<CTFontDescriptorRef>(CFArrayGetValueAtIndex(matches.get(), i));
+		CFPtr<CFStringRef> style(
+			static_cast<CFStringRef>(CTFontDescriptorCopyAttribute(match, kCTFontStyleNameAttribute)));
+		std::string name = to_utf8(style.get());
+		// バリアブルフォントは静的フォントと重複しうる
+		if (name.empty() || std::find(styles.begin(), styles.end(), name) != styles.end()) {
+			continue;
+		}
+		styles.push_back(std::move(name));
+	}
+	return styles;
 }
 
 double suggest_colon_offset_ratio(const clock_style &style)
