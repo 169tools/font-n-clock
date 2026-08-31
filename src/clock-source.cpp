@@ -135,6 +135,14 @@ static void clock_source_rebuild_texture(clock_source *context)
 {
 	const rendered_text bitmap = context->clock ? context->clock->render(context->content) : rendered_text{};
 	if (!bitmap.valid()) {
+		if (context->texture) {
+			obs_enter_graphics();
+			gs_texture_destroy(context->texture);
+			obs_leave_graphics();
+			context->texture = nullptr;
+		}
+		context->texture_width = 0;
+		context->texture_height = 0;
 		return;
 	}
 	const std::uint8_t *rows = bitmap.pixels.data();
