@@ -18,12 +18,23 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "text-renderer.hpp"
 
-#include <cstddef>
 #include <memory>
+#include <string>
+#include <vector>
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &)
 {
 	return nullptr;
+}
+
+std::vector<std::string> available_font_families()
+{
+	return {};
+}
+
+std::vector<std::string> available_font_styles(const std::string &)
+{
+	return {};
 }
 
 double suggest_colon_offset_ratio(const clock_style &)

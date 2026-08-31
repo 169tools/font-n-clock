@@ -33,7 +33,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QLatin1Char>
 #include <QListWidget>
 #include <QObject>
-#include <QOverload>
 #include <QPixmap>
 #include <QStringLiteral>
 #include <QTimer>
@@ -41,6 +40,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWidget>
 #include <Qt>
 #include <QtCore/qcontainerfwd.h>
+#include <QtGlobal>
 
 #include <memory>
 #include <string>
