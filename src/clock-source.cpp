@@ -135,6 +135,14 @@ static void clock_source_rebuild_texture(clock_source *context)
 {
 	const rendered_text bitmap = context->clock ? context->clock->render(context->content) : rendered_text{};
 	if (!bitmap.valid()) {
+		if (context->texture) {
+			obs_enter_graphics();
+			gs_texture_destroy(context->texture);
+			obs_leave_graphics();
+			context->texture = nullptr;
+		}
+		context->texture_width = 0;
+		context->texture_height = 0;
 		return;
 	}
 	const std::uint8_t *rows = bitmap.pixels.data();
@@ -185,18 +193,11 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto font_face = static_cast<std::string>(obs_data_get_string(settings, settings::font_face_name));
 	auto font_style = static_cast<std::string>(obs_data_get_string(settings, settings::font_style_name));
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
+	auto colon_offset_percent =
+		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 	auto tracking_percent = static_cast<double>(obs_data_get_int(settings, settings::tracking_percent_name));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
-
-	obs_data_set_string(settings, settings::font_display_name, font_display_text(font_face, font_style).c_str());
-
-	if (!obs_data_has_user_value(settings, settings::colon_offset_percent_name)) {
-		const int colon_offset_percent = suggested_colon_offset_percent(font_face, font_style);
-		obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
-	}
-	auto colon_offset_percent =
-		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 
 	context->clock = prepare_clock({
 		.format = format,
@@ -252,8 +253,13 @@ void clock_source_get_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, settings::twelve_hour_name, false);
 	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
 	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
+	obs_data_set_default_string(
+		settings, settings::font_display_name,
+		font_display_text(settings::default_font_face, settings::default_font_style).c_str());
 	obs_data_set_default_int(settings, settings::size_name, 50);
-	obs_data_set_default_int(settings, settings::colon_offset_percent_name, 0);
+	obs_data_set_default_int(settings, settings::colon_offset_percent_name,
+				 suggested_colon_offset_percent(settings::default_font_face,
+								settings::default_font_style));
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
 	obs_data_set_default_bool(settings, settings::shadow_name, false);
