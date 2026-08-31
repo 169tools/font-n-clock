@@ -744,6 +744,9 @@ std::vector<std::string> available_font_styles(const std::string &face)
 		if (FAILED(family->GetFont(i, &font)) || FAILED(font->GetFaceNames(&names))) {
 			continue;
 		}
+		if (font->GetSimulations() != DWRITE_FONT_SIMULATIONS_NONE) {
+			continue;
+		}
 		std::string name = to_utf8(preferred_name(names.Get()));
 		if (name.empty() || std::find(styles.begin(), styles.end(), name) != styles.end()) {
 			continue;
