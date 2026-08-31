@@ -744,6 +744,7 @@ std::vector<std::string> available_font_styles(const std::string &face)
 		if (FAILED(family->GetFont(i, &font)) || FAILED(font->GetFaceNames(&names))) {
 			continue;
 		}
+		// GDI 互換のために機械的に合成された太字・斜体は除く
 		if (font->GetSimulations() != DWRITE_FONT_SIMULATIONS_NONE) {
 			continue;
 		}
