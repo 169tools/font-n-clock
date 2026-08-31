@@ -141,6 +141,6 @@ protected:
 };
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style);
-std::vector<std::string> available_font_families();                        // TODO: 別ファイルに分ける
-std::vector<std::string> available_font_styles(const std::string &family); // TODO: 別ファイルに分ける
+std::vector<std::string> available_font_families();
+std::vector<std::string> available_font_styles(const std::string &family);
 double suggest_colon_offset_ratio(const clock_style &style);
