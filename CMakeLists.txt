@@ -59,4 +59,6 @@ else()
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/text-renderer-stub.cpp)
 endif()
 
+target_add_resource(${CMAKE_PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
