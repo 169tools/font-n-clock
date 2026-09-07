@@ -46,8 +46,10 @@ constexpr const char *font_style_name = "font_style";
 constexpr const char *size_name = "size";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const char *tracking_percent_name = "tracking_percent";
-constexpr const char *color_name = "color";
-constexpr const char *shadow_name = "shadow";
+constexpr const char *text_color_name = "color";
+constexpr const char *background_name = "background";
+constexpr const char *background_color_name = "background_color";
+constexpr const char *legacy_shadow_name = "shadow";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
 constexpr const int tracking_percent_min = -20;
@@ -172,6 +174,18 @@ date_format read_date_format(obs_data_t *settings)
 	return date_format_options[0].value;
 }
 
+background_style read_background_style(obs_data_t *settings)
+{
+	const long long stored = obs_data_get_int(settings, settings::background_name);
+	if (stored == static_cast<long long>(background_style::shadow)) {
+		return background_style::shadow;
+	}
+	if (stored == static_cast<long long>(background_style::fill)) {
+		return background_style::fill;
+	}
+	return background_style::none;
+}
+
 int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style)
 {
 	const double suggested_colon_offset_ratio =
@@ -196,8 +210,8 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto colon_offset_percent =
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 	auto tracking_percent = static_cast<double>(obs_data_get_int(settings, settings::tracking_percent_name));
-	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
-	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
+	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::text_color_name));
+	auto background = read_background_style(settings);
 
 	context->clock = prepare_clock({
 		.format = format,
@@ -208,7 +222,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 		.colon_offset_ratio = colon_offset_percent / 100,
 		.tracking_em = tracking_percent / 100,
 		.color = color,
-		.shadow = shadow,
+		.background = background,
 	});
 
 	context->format = format;
@@ -261,8 +275,11 @@ void clock_source_get_defaults(obs_data_t *settings)
 				 suggested_colon_offset_percent(settings::default_font_face,
 								settings::default_font_style));
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
-	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
-	obs_data_set_default_bool(settings, settings::shadow_name, false);
+	obs_data_set_default_int(settings, settings::text_color_name, 0xFFFFFFFF);
+	const bool legacy_shadow = obs_data_get_bool(settings, settings::legacy_shadow_name);
+	obs_data_set_default_int(settings, settings::background_name,
+				 static_cast<int>(legacy_shadow ? background_style::shadow : background_style::none));
+	obs_data_set_default_int(settings, settings::background_color_name, 0x80000000);
 }
 
 void clock_source_video_tick(void *data, float)
@@ -313,6 +330,14 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	return true;
 }
 
+bool clock_source_background_changed(obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	const bool fill = obs_data_get_int(settings, settings::background_name) ==
+			  static_cast<int>(background_style::fill);
+	obs_property_set_visible(obs_properties_get(props, settings::background_color_name), fill);
+	return true;
+}
+
 obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
@@ -347,8 +372,22 @@ obs_properties_t *clock_source_get_properties(void *data)
 	obs_properties_add_int_slider(props, settings::tracking_percent_name,
 				      obs_module_text("ClockSource.TrackingPercent"), settings::tracking_percent_min,
 				      settings::tracking_percent_max, 1);
-	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.TextColor"));
-	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
+	obs_properties_add_color(props, settings::text_color_name, obs_module_text("ClockSource.TextColor"));
+
+	obs_property_t *background_list = obs_properties_add_list(props, settings::background_name,
+								  obs_module_text("ClockSource.Background"),
+								  OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(background_list, obs_module_text("ClockSource.Background.None"),
+				  static_cast<int>(background_style::none));
+	obs_property_list_add_int(background_list, obs_module_text("ClockSource.Background.Shadow"),
+				  static_cast<int>(background_style::shadow));
+	obs_property_list_add_int(background_list, obs_module_text("ClockSource.Background.Fill"),
+				  static_cast<int>(background_style::fill));
+	obs_property_set_modified_callback(background_list, clock_source_background_changed);
+
+	obs_properties_add_color_alpha(props, settings::background_color_name,
+				       obs_module_text("ClockSource.BackgroundColor"));
+
 	return props;
 }
 

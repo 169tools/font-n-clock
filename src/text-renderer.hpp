@@ -39,6 +39,12 @@ enum class date_format {
 	none,              // 日付なし
 };
 
+enum class background_style {
+	none,
+	shadow,
+	fill,
+};
+
 struct clock_style {
 	date_format format = date_format::month_day_weekday;
 	bool twelve_hour = false;
@@ -48,7 +54,7 @@ struct clock_style {
 	double colon_offset_ratio = 0;
 	double tracking_em = 0;
 	std::uint32_t color = 0xffffffff;
-	bool shadow = false;
+	background_style background = background_style::none;
 
 	double caption_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
@@ -60,6 +66,7 @@ struct clock_style {
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 	double shadow_offset_px() const noexcept { return time_ink_height() * 0.02; }
 	double shadow_blur_px() const noexcept { return time_ink_height() * 0.1; }
+	double corner_radius_px() const noexcept { return size * 0.1; }
 };
 
 struct rendered_text {
