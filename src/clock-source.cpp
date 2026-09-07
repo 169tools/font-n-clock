@@ -347,7 +347,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 	obs_properties_add_int_slider(props, settings::tracking_percent_name,
 				      obs_module_text("ClockSource.TrackingPercent"), settings::tracking_percent_min,
 				      settings::tracking_percent_max, 1);
-	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
+	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.TextColor"));
 	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	return props;
 }
