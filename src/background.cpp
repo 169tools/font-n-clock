@@ -53,7 +53,7 @@ gs_effect_t *load_background_effect()
 	}
 
 	char *errors = nullptr;
-	gs_effect_t *effect = gs_effect_create_from_file(path, nullptr);
+	gs_effect_t *effect = gs_effect_create_from_file(path, &errors);
 	if (!effect) {
 		obs_log(LOG_ERROR, "failed to load %s: %s", path, errors ? errors : "(no details)");
 	}
