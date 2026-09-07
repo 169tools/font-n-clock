@@ -1,0 +1,63 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+uniform float4 fill_color;
+uniform float2 box_size;
+uniform float2 text_offset;
+uniform float4 corner_radius;
+
+sampler_state def_sampler {
+	Filter = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertInOut {
+	float4 pos : POSITION;
+	float2 uv : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+	VertInOut vert_out;
+	vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv = vert_in.uv;
+	return vert_out;
+}
+
+float fill_distance(float2 pixel)
+{
+	float2 half_size = box_size * 0.5;
+	float2 offset = pixel - half_size;
+
+	float radius = (offset.x < 0.0)
+		? ((offset.y < 0.0) ? corner_radius.x : corner_radius.z)
+		: ((offset.y < 0.0) ? corner_radius.y : corner_radius.w);
+
+	float2 corner = abs(offset) - half_size + radius;
+	return min(max(corner.x, corner.y), 0.0) + length(max(corner, float2(0.0, 0.0))) - radius;
+}
+
+float4 PSDraw(VertInOut vert_in) : TARGET
+{
+	float4 rgba = image.Sample(def_sampler, vert_in.uv - text_offset / box_size);
+
+	float coverage = saturate(0.5 - fill_distance(vert_in.uv * box_size));
+	float back_alpha = fill_color.a * coverage * (1.0 - rgba.a);
+
+	rgba.rgb += fill_color.rgb * back_alpha;
+	rgba.a += back_alpha;
+
+	if (rgba.a > 0.0)
+		rgba.rgb /= rgba.a;
+	return saturate(rgba);
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(vert_in);
+		pixel_shader = PSDraw(vert_in);
+	}
+}

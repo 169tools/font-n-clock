@@ -77,6 +77,7 @@ struct clock_source {
 	std::time_t last_read = 0;
 
 	std::optional<fill_style> fill;
+	gs_effect_t *effect = nullptr;
 
 	gs_texture_t *texture = nullptr;
 	std::uint32_t texture_width = 0;
@@ -143,14 +144,6 @@ bool refresh_content(clock_source *context)
 static void clock_source_rebuild_texture(clock_source *context)
 {
 	rendered_text bitmap = context->clock ? context->clock->render(context->content) : rendered_text{};
-
-	if (bitmap.valid() && context->fill) {
-		const auto bias = static_cast<int>(std::lround(context->fill->bias_px));
-		const edge_flags &edges = context->fill->edges;
-		shift_content(bitmap, (edges.right ? bias : 0) - (edges.left ? bias : 0),
-			      (edges.bottom ? bias : 0) - (edges.top ? bias : 0));
-		apply_fill(bitmap, *context->fill);
-	}
 
 	if (!bitmap.valid()) {
 		if (context->texture) {
@@ -246,7 +239,6 @@ void clock_source_update(void *data, obs_data_t *settings)
 	context->format = format;
 	context->twelve_hour = twelve_hour;
 
-	const edge_flags edges = context->fill ? context->fill->edges : edge_flags{};
 	context->fill = std::nullopt;
 	if (background == background_style::fill) {
 		const auto background_color =
@@ -255,7 +247,6 @@ void clock_source_update(void *data, obs_data_t *settings)
 			.color = background_color,
 			.radius_px = style.corner_radius_px(),
 			.bias_px = style.edge_bias_px(),
-			.edges = edges,
 		};
 	}
 	context->last_read = 0;
@@ -268,6 +259,11 @@ void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 {
 	clock_source *context = new clock_source();
 	context->source = source;
+
+	obs_enter_graphics();
+	context->effect = load_background_effect();
+	obs_leave_graphics();
+
 	clock_source_update(context, settings);
 	return context;
 }
@@ -275,11 +271,10 @@ void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 void clock_source_destroy(void *data)
 {
 	auto *context = static_cast<clock_source *>(data);
-	if (context->texture) {
-		obs_enter_graphics();
-		gs_texture_destroy(context->texture);
-		obs_leave_graphics();
-	}
+	obs_enter_graphics();
+	gs_texture_destroy(context->texture);
+	gs_effect_destroy(context->effect);
+	obs_leave_graphics();
 	delete context;
 }
 
@@ -349,6 +344,22 @@ edge_flags canvas_edges(const matrix4 &transform, const obs_video_info &info, co
 	};
 }
 
+edge_flags current_canvas_edges(const float width, const float height)
+{
+	struct obs_video_info info;
+	obs_get_video_info(&info);
+
+	struct gs_rect viewport;
+	gs_get_viewport(&viewport);
+	if (viewport.cx != static_cast<int>(info.base_width) || viewport.cy != static_cast<int>(info.base_height)) {
+		return {};
+	}
+
+	struct matrix4 transform;
+	gs_matrix_get(&transform);
+	return canvas_edges(transform, info, width, height);
+}
+
 void clock_source_render(void *data, gs_effect *)
 {
 	auto *context = static_cast<clock_source *>(data);
@@ -356,24 +367,11 @@ void clock_source_render(void *data, gs_effect *)
 		return;
 	}
 
-	struct matrix4 transform;
-	gs_matrix_get(&transform);
-
-	struct obs_video_info info;
-	obs_get_video_info(&info);
-
-	struct gs_rect viewport;
-	gs_get_viewport(&viewport);
-	const bool on_canvas = viewport.cx == static_cast<int>(info.base_width) &&
-			       viewport.cy == static_cast<int>(info.base_height);
-
-	if (on_canvas && context->fill) {
-		const edge_flags edges = canvas_edges(transform, info, static_cast<float>(context->texture_width),
-						      static_cast<float>(context->texture_height));
-		if (edges != context->fill->edges) {
-			context->fill->edges = edges;
-			clock_source_rebuild_texture(context);
-		}
+	if (context->fill && context->effect) {
+		const edge_flags edges = current_canvas_edges(static_cast<float>(context->texture_width),
+							      static_cast<float>(context->texture_height));
+		draw_background(context->effect, context->texture, *context->fill, edges);
+		return;
 	}
 
 	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);

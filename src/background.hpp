@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <graphics/graphics.h>
+
 #include "text-renderer.hpp"
 
 #include <cstdint>
@@ -26,8 +28,7 @@ struct fill_style {
 	std::uint32_t color = 0;
 	double radius_px = 0;
 	double bias_px = 0;
-	edge_flags edges;
 };
 
-void apply_fill(rendered_text &bitmap, const fill_style &fill);
-void shift_content(rendered_text &bitmap, const int dx, const int dy);
+gs_effect_t *load_background_effect();
+void draw_background(gs_effect_t *effect, gs_texture_t *texture, const fill_style &fill, const edge_flags &edges);

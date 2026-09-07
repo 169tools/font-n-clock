@@ -45,22 +45,11 @@ enum class background_style {
 	fill,
 };
 
-struct corner_flags {
-	bool top_left = false;
-	bool top_right = false;
-	bool bottom_left = false;
-	bool bottom_right = false;
-
-	bool operator==(const corner_flags &) const noexcept = default;
-};
-
 struct edge_flags {
 	bool left = false;
 	bool right = false;
 	bool top = false;
 	bool bottom = false;
-
-	bool operator==(const edge_flags &) const noexcept = default;
 };
 
 struct clock_style {
