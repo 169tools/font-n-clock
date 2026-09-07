@@ -17,6 +17,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <graphics/graphics.h>
+#include <graphics/matrix4.h>
+#include <graphics/vec3.h>
 #include <graphics/vec4.h>
 #include <obs-data.h>
 #include <obs-module.h>
@@ -24,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-source.h>
 #include <obs.h>
 
+#include "background.hpp"
 #include "font-dialog.hpp"
 #include "text-renderer.hpp"
 
@@ -32,7 +35,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -46,8 +51,10 @@ constexpr const char *font_style_name = "font_style";
 constexpr const char *size_name = "size";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const char *tracking_percent_name = "tracking_percent";
-constexpr const char *color_name = "color";
-constexpr const char *shadow_name = "shadow";
+constexpr const char *text_color_name = "color";
+constexpr const char *background_name = "background";
+constexpr const char *background_color_name = "background_color";
+constexpr const char *legacy_shadow_name = "shadow";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
 constexpr const int tracking_percent_min = -20;
@@ -68,6 +75,8 @@ struct clock_source {
 	bool twelve_hour = false;
 	clock_content content;
 	std::time_t last_read = 0;
+
+	std::optional<fill_style> fill;
 
 	gs_texture_t *texture = nullptr;
 	std::uint32_t texture_width = 0;
@@ -133,7 +142,16 @@ bool refresh_content(clock_source *context)
 
 static void clock_source_rebuild_texture(clock_source *context)
 {
-	const rendered_text bitmap = context->clock ? context->clock->render(context->content) : rendered_text{};
+	rendered_text bitmap = context->clock ? context->clock->render(context->content) : rendered_text{};
+
+	if (bitmap.valid() && context->fill) {
+		const auto bias = static_cast<int>(std::lround(context->fill->bias_px));
+		const edge_flags &edges = context->fill->edges;
+		shift_content(bitmap, (edges.right ? bias : 0) - (edges.left ? bias : 0),
+			      (edges.bottom ? bias : 0) - (edges.top ? bias : 0));
+		apply_fill(bitmap, *context->fill);
+	}
+
 	if (!bitmap.valid()) {
 		if (context->texture) {
 			obs_enter_graphics();
@@ -145,6 +163,7 @@ static void clock_source_rebuild_texture(clock_source *context)
 		context->texture_height = 0;
 		return;
 	}
+
 	const std::uint8_t *rows = bitmap.pixels.data();
 
 	obs_enter_graphics();
@@ -172,6 +191,18 @@ date_format read_date_format(obs_data_t *settings)
 	return date_format_options[0].value;
 }
 
+background_style read_background_style(obs_data_t *settings)
+{
+	const long long stored = obs_data_get_int(settings, settings::background_name);
+	if (stored == static_cast<long long>(background_style::shadow)) {
+		return background_style::shadow;
+	}
+	if (stored == static_cast<long long>(background_style::fill)) {
+		return background_style::fill;
+	}
+	return background_style::none;
+}
+
 int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style)
 {
 	const double suggested_colon_offset_ratio =
@@ -196,10 +227,10 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto colon_offset_percent =
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 	auto tracking_percent = static_cast<double>(obs_data_get_int(settings, settings::tracking_percent_name));
-	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
-	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
+	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::text_color_name));
+	auto background = read_background_style(settings);
 
-	context->clock = prepare_clock({
+	const clock_style style = {
 		.format = format,
 		.twelve_hour = twelve_hour,
 		.font_face = font_face,
@@ -208,12 +239,27 @@ void clock_source_update(void *data, obs_data_t *settings)
 		.colon_offset_ratio = colon_offset_percent / 100,
 		.tracking_em = tracking_percent / 100,
 		.color = color,
-		.shadow = shadow,
-	});
+		.background = background,
+	};
+	context->clock = prepare_clock(style);
 
 	context->format = format;
 	context->twelve_hour = twelve_hour;
+
+	const edge_flags edges = context->fill ? context->fill->edges : edge_flags{};
+	context->fill = std::nullopt;
+	if (background == background_style::fill) {
+		const auto background_color =
+			static_cast<std::uint32_t>(obs_data_get_int(settings, settings::background_color_name));
+		context->fill = fill_style{
+			.color = background_color,
+			.radius_px = style.corner_radius_px(),
+			.bias_px = style.edge_bias_px(),
+			.edges = edges,
+		};
+	}
 	context->last_read = 0;
+
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
 }
@@ -261,8 +307,11 @@ void clock_source_get_defaults(obs_data_t *settings)
 				 suggested_colon_offset_percent(settings::default_font_face,
 								settings::default_font_style));
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
-	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
-	obs_data_set_default_bool(settings, settings::shadow_name, false);
+	obs_data_set_default_int(settings, settings::text_color_name, 0xFFFFFFFF);
+	const bool legacy_shadow = obs_data_get_bool(settings, settings::legacy_shadow_name);
+	obs_data_set_default_int(settings, settings::background_name,
+				 static_cast<int>(legacy_shadow ? background_style::shadow : background_style::none));
+	obs_data_set_default_int(settings, settings::background_color_name, 0x66000000);
 }
 
 void clock_source_video_tick(void *data, float)
@@ -274,11 +323,57 @@ void clock_source_video_tick(void *data, float)
 	clock_source_rebuild_texture(context);
 }
 
+edge_flags canvas_edges(const matrix4 &transform, const obs_video_info &info, const float width, const float height)
+{
+	float min_x = std::numeric_limits<float>::max();
+	float max_x = std::numeric_limits<float>::lowest();
+	float min_y = min_x;
+	float max_y = max_x;
+
+	for (const auto &[x, y] : {std::pair{0.0f, 0.0f}, {width, 0.0f}, {0.0f, height}, {width, height}}) {
+		struct vec3 point;
+		vec3_set(&point, x, y, 0);
+		vec3_transform(&point, &point, &transform);
+		min_x = std::min(min_x, point.x);
+		max_x = std::max(max_x, point.x);
+		min_y = std::min(min_y, point.y);
+		max_y = std::max(max_y, point.y);
+	}
+
+	constexpr float epsilon = 1;
+	return {
+		.left = min_x <= epsilon,
+		.right = max_x >= static_cast<float>(info.base_width) - epsilon,
+		.top = min_y <= epsilon,
+		.bottom = max_y >= static_cast<float>(info.base_height) - epsilon,
+	};
+}
+
 void clock_source_render(void *data, gs_effect *)
 {
 	auto *context = static_cast<clock_source *>(data);
 	if (!context->texture) {
 		return;
+	}
+
+	struct matrix4 transform;
+	gs_matrix_get(&transform);
+
+	struct obs_video_info info;
+	obs_get_video_info(&info);
+
+	struct gs_rect viewport;
+	gs_get_viewport(&viewport);
+	const bool on_canvas = viewport.cx == static_cast<int>(info.base_width) &&
+			       viewport.cy == static_cast<int>(info.base_height);
+
+	if (on_canvas && context->fill) {
+		const edge_flags edges = canvas_edges(transform, info, static_cast<float>(context->texture_width),
+						      static_cast<float>(context->texture_height));
+		if (edges != context->fill->edges) {
+			context->fill->edges = edges;
+			clock_source_rebuild_texture(context);
+		}
 	}
 
 	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);
@@ -310,6 +405,14 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	obs_source_update(context->source, settings);
 	obs_data_release(settings);
 
+	return true;
+}
+
+bool clock_source_background_changed(obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	const bool fill = obs_data_get_int(settings, settings::background_name) ==
+			  static_cast<int>(background_style::fill);
+	obs_property_set_visible(obs_properties_get(props, settings::background_color_name), fill);
 	return true;
 }
 
@@ -347,8 +450,22 @@ obs_properties_t *clock_source_get_properties(void *data)
 	obs_properties_add_int_slider(props, settings::tracking_percent_name,
 				      obs_module_text("ClockSource.TrackingPercent"), settings::tracking_percent_min,
 				      settings::tracking_percent_max, 1);
-	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
-	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
+	obs_properties_add_color(props, settings::text_color_name, obs_module_text("ClockSource.TextColor"));
+
+	obs_property_t *background_list = obs_properties_add_list(props, settings::background_name,
+								  obs_module_text("ClockSource.Background"),
+								  OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(background_list, obs_module_text("ClockSource.Background.None"),
+				  static_cast<int>(background_style::none));
+	obs_property_list_add_int(background_list, obs_module_text("ClockSource.Background.Shadow"),
+				  static_cast<int>(background_style::shadow));
+	obs_property_list_add_int(background_list, obs_module_text("ClockSource.Background.Fill"),
+				  static_cast<int>(background_style::fill));
+	obs_property_set_modified_callback(background_list, clock_source_background_changed);
+
+	obs_properties_add_color_alpha(props, settings::background_color_name,
+				       obs_module_text("ClockSource.BackgroundColor"));
+
 	return props;
 }
 

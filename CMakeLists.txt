@@ -36,6 +36,8 @@ set_target_properties(
 target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE
+    src/background.cpp
+    src/background.hpp
     src/plugin-main.cpp
     src/clock-source.cpp
     src/clock-source.hpp

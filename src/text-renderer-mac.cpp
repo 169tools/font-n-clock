@@ -369,7 +369,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	auto clock = std::make_unique<mac_clock>();
 
-	if (style.shadow) {
+	if (style.background == background_style::shadow) {
 		CFPtr<CGColorRef> shadow_color = make_shadow_color(shadow_style::opacity);
 		if (!shadow_color) {
 			return nullptr;

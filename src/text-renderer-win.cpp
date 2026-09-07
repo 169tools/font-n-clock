@@ -674,7 +674,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	auto clock = std::make_unique<win_clock>();
-	if (style.shadow) {
+	if (style.background == background_style::shadow) {
 		clock->shadow = shadow_style{.offset = style.shadow_offset_px(), .blur = style.shadow_blur_px()};
 	}
 	clock->factory = std::move(factory);
