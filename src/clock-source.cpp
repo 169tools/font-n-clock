@@ -330,7 +330,7 @@ edge_flags canvas_edges(const matrix4 &transform, const obs_video_info &info, co
 	float min_y = min_x;
 	float max_y = max_x;
 
-	for (const auto [x, y] : {std::pair{0.0f, 0.0f}, {width, 0.0f}, {0.0f, height}, {width, height}}) {
+	for (const auto &[x, y] : {std::pair{0.0f, 0.0f}, {width, 0.0f}, {0.0f, height}, {width, height}}) {
 		struct vec3 point;
 		vec3_set(&point, x, y, 0);
 		vec3_transform(&point, &point, &transform);
