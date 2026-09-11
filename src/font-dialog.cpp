@@ -181,7 +181,6 @@ bool select_font(std::string &face, std::string &style, const date_format format
 	QObject::connect(styles, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
 	refresh_preview();
 
-	
 	if (dialog.exec() != QDialog::Accepted) {
 		return false;
 	}
