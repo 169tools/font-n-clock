@@ -63,19 +63,19 @@ struct clock_texture {
 	gs_texture_t *texture = nullptr;
 	std::uint32_t texture_width = 0;
 	std::uint32_t texture_height = 0;
-	void destroyIfNeeded();
+	void clear();
 };
 
-void clock_texture::destroyIfNeeded()
+void clock_texture::clear()
 {
 	if (texture) {
 		obs_enter_graphics();
 		gs_texture_destroy(texture);
 		obs_leave_graphics();
 		texture = nullptr;
-		texture_width = 0;
-		texture_height = 0;
 	}
+	texture_width = 0;
+	texture_height = 0;
 }
 
 struct clock_source {
@@ -135,7 +135,9 @@ void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 
 void clock_source_destroy(void *data)
 {
-	static_cast<clock_source *>(data)->clock_texture.destroyIfNeeded();
+	auto *context = static_cast<clock_source *>(data);
+	context->clock_texture.clear();
+	delete context;
 }
 
 std::uint32_t clock_source_get_width(void *data)
@@ -273,7 +275,7 @@ static void clock_source_rebuild_texture(clock_source *context)
 	const rendered_text bitmap = context->prepared_clock ? context->prepared_clock->render(context->clock_strings)
 							     : rendered_text{};
 	if (!bitmap.valid()) {
-		context->clock_texture.destroyIfNeeded();
+		context->clock_texture.clear();
 		return;
 	}
 	const std::uint8_t *rows = bitmap.pixels.data();
