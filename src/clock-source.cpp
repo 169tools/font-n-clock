@@ -50,7 +50,7 @@ constexpr const char *shadow_name = "shadow";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
 constexpr const int tracking_percent_min = -20;
-constexpr const int tracking_percent_max = 0;
+constexpr const int tracking_percent_max = 10;
 #if defined(_WIN32) || defined(__APPLE__)
 constexpr const char *default_font_face = "Impact";
 #else
