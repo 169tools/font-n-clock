@@ -44,16 +44,20 @@ struct clock_style {
 	bool twelve_hour = false;
 	std::string font_face;
 	std::string font_style;
-	double size = 50;
+	double size = default_size;
+	double row_spacing_ratio = default_row_spacing_ratio;
 	double colon_offset_ratio = 0;
 	double tracking_em = 0;
 	std::uint32_t color = 0xffffffff;
 	bool shadow = false;
 
+	static constexpr double default_size = 50;
+	static constexpr double default_row_spacing_ratio = 0.24;
+
 	double caption_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
 	double caption_tracking_em() const noexcept { return tracking_em * 0.8; }
-	double row_spacing() const noexcept { return size * 0.24; }
+	double row_spacing() const noexcept { return size * row_spacing_ratio; }
 	double top_margin() const noexcept { return size * 0.36; }
 	double bottom_margin() const noexcept { return size * 0.4; }
 	double horizontal_margin() const noexcept { return size * 0.38; }
