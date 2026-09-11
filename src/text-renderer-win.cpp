@@ -79,18 +79,9 @@ std::string to_utf8(const std::wstring &value)
 	return utf8;
 }
 
-std::wstring localized_name(IDWriteLocalizedStrings *names, const UINT32 index)
+std::uint8_t to_byte(const double value)
 {
-	UINT32 length = 0;
-	if (FAILED(names->GetStringLength(index, &length))) {
-		return {};
-	}
-	std::wstring name(static_cast<std::size_t>(length) + 1, L'\0');
-	if (FAILED(names->GetString(index, name.data(), length + 1))) {
-		return {};
-	}
-	name.resize(length);
-	return name;
+	return static_cast<std::uint8_t>(std::clamp(std::lround(value * 255), 0L, 255L));
 }
 
 std::wstring preferred_name(IDWriteLocalizedStrings *names)
@@ -108,7 +99,18 @@ std::wstring preferred_name(IDWriteLocalizedStrings *names)
 	if (!exists) {
 		names->FindLocaleName(L"en-us", &index, &exists);
 	}
-	return localized_name(names, exists ? index : 0);
+	index = exists ? index : 0;
+
+	UINT32 length = 0;
+	if (FAILED(names->GetStringLength(index, &length))) {
+		return {};
+	}
+	std::wstring name(static_cast<std::size_t>(length) + 1, L'\0');
+	if (FAILED(names->GetString(index, name.data(), length + 1))) {
+		return {};
+	}
+	name.resize(length);
+	return name;
 }
 
 bool matches_face_name(IDWriteFont *font, const std::wstring &style)
@@ -179,18 +181,6 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 	}
 	format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 	return format;
-}
-
-std::uint8_t to_byte(const double value)
-{
-	return static_cast<std::uint8_t>(std::clamp(std::lround(value * 255), 0L, 255L));
-}
-
-// SVG の feGaussianBlur と同じ近似。幅 d = floor(sigma * 3 * sqrt(2 * pi) / 4 + 0.5) のボックスを 3 回重ねると
-// ガウシアンに収束する。3 * sqrt(2 * pi) / 4 = 1.88。
-long box_radius(const double sigma)
-{
-	return std::max(1L, static_cast<long>(std::floor(sigma * 1.88 + 0.5)) / 2);
 }
 
 void box_blur_horizontal(const std::vector<double> &source, std::vector<double> &target, const long width,
@@ -561,7 +551,12 @@ private:
 			 const long height, const long left, const long top) const
 	{
 		constexpr int passes = 3;
-		const long radius = box_radius(shadow->blur / 2);
+
+		// SVG の feGaussianBlur と同じ近似。幅 d = floor(sigma * 3 * sqrt(2 * pi) / 4 + 0.5) のボックスを 3 回重ねると
+		// ガウシアンに収束する。3 * sqrt(2 * pi) / 4 = 1.88。
+		const double sigma = shadow->blur / 2;
+		const long radius = std::max(1L, static_cast<long>(std::floor(sigma * 1.88 + 0.5)) / 2);
+
 		const long margin = radius * passes;
 		const long blurred_width = width + margin * 2;
 		const long blurred_height = height + margin * 2;
