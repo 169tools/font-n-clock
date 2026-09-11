@@ -43,14 +43,13 @@ constexpr const char *select_font_name = "select_font";
 constexpr const char *font_face_name = "font_face";
 constexpr const char *font_style_name = "font_style";
 constexpr const char *size_name = "size";
+constexpr const char *row_spacing_percent_name = "row_spacing";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const char *tracking_percent_name = "tracking_percent";
 constexpr const char *color_name = "color";
 constexpr const char *shadow_name = "shadow";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
-constexpr const int tracking_percent_min = -20;
-constexpr const int tracking_percent_max = 10;
 #if defined(_WIN32) || defined(__APPLE__)
 constexpr const char *default_font_face = "Impact";
 #else
@@ -161,7 +160,9 @@ void clock_source_get_defaults(obs_data_t *settings)
 	obs_data_set_default_string(settings, settings::font_face_name, settings::default_font_face);
 	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
 	obs_data_set_default_string(settings, settings::font_display_name, font_display.c_str());
-	obs_data_set_default_int(settings, settings::size_name, 50);
+	obs_data_set_default_int(settings, settings::size_name, clock_style::default_size);
+	obs_data_set_default_int(settings, settings::row_spacing_percent_name,
+				 clock_style::default_row_spacing_ratio * 100);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
@@ -196,12 +197,13 @@ obs_properties_t *clock_source_get_properties(void *data)
 				   clock_source_select_font, data);
 
 	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
+	obs_properties_add_int_slider(props, settings::row_spacing_percent_name,
+				      obs_module_text("ClockSource.RowSpacing"), 10, 30, 1);
 	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
 				      obs_module_text("ClockSource.ColonOffsetPercent"),
 				      settings::colon_offset_percent_min, settings::colon_offset_percent_max, 1);
 	obs_properties_add_int_slider(props, settings::tracking_percent_name,
-				      obs_module_text("ClockSource.TrackingPercent"), settings::tracking_percent_min,
-				      settings::tracking_percent_max, 1);
+				      obs_module_text("ClockSource.TrackingPercent"), -20, 10, 1);
 	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
 	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	return props;
@@ -225,6 +227,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto font_face = static_cast<std::string>(obs_data_get_string(settings, settings::font_face_name));
 	auto font_style = static_cast<std::string>(obs_data_get_string(settings, settings::font_style_name));
 	auto size = static_cast<double>(obs_data_get_int(settings, settings::size_name));
+	auto row_spacing_percent = static_cast<double>(obs_data_get_int(settings, settings::row_spacing_percent_name));
 	auto colon_offset_percent =
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 	auto tracking_percent = static_cast<double>(obs_data_get_int(settings, settings::tracking_percent_name));
@@ -237,6 +240,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 		.font_face = font_face,
 		.font_style = font_style,
 		.size = size,
+		.row_spacing_ratio = row_spacing_percent / 100,
 		.colon_offset_ratio = colon_offset_percent / 100,
 		.tracking_em = tracking_percent / 100,
 		.color = color,
@@ -326,6 +330,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 	obs_data_set_string(settings, settings::font_face_name, font_face.c_str());
 	obs_data_set_string(settings, settings::font_style_name, font_style.c_str());
 	obs_data_set_string(settings, settings::font_display_name, font_display_text(font_face, font_style).c_str());
+	obs_data_set_int(settings, settings::row_spacing_percent_name, clock_style::default_row_spacing_ratio * 100);
 	obs_data_set_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
 	obs_data_set_int(settings, settings::tracking_percent_name, 0);
 	obs_source_update(context->source, settings);
