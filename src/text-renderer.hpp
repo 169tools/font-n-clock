@@ -40,6 +40,9 @@ enum class date_format {
 };
 
 struct clock_style {
+	static constexpr double default_size = 50;
+	static constexpr double default_row_spacing_ratio = 0.24;
+
 	date_format date_format = date_format::month_day_weekday;
 	bool twelve_hour = false;
 	std::string font_face;
@@ -50,9 +53,6 @@ struct clock_style {
 	double tracking_em = 0;
 	std::uint32_t color = 0xffffffff;
 	bool shadow = false;
-
-	static constexpr double default_size = 50;
-	static constexpr double default_row_spacing_ratio = 0.24;
 
 	double caption_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }

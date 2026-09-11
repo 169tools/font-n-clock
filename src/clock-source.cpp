@@ -161,7 +161,8 @@ void clock_source_get_defaults(obs_data_t *settings)
 	obs_data_set_default_string(settings, settings::font_style_name, settings::default_font_style);
 	obs_data_set_default_string(settings, settings::font_display_name, font_display.c_str());
 	obs_data_set_default_int(settings, settings::size_name, clock_style::default_size);
-	obs_data_set_default_int(settings, settings::row_spacing_percent_name, clock_style::default_row_spacing_ratio);
+	obs_data_set_default_int(settings, settings::row_spacing_percent_name,
+				 clock_style::default_row_spacing_ratio * 100);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
