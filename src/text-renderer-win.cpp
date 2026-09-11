@@ -442,19 +442,21 @@ public:
 	std::optional<shadow_style> shadow;
 	clock_frame frame;
 
-	rendered_text render(const clock_content &content) const override
+	rendered_text render(const clock_strings &clock_strings) const override
 	{
 		rendered_text result = {.width = frame.width, .height = frame.height};
 		result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
 
-		if (!content.date.empty() && !draw_centered(result, content.date, caption_row, frame.date_baseline_y)) {
+		if (!clock_strings.date.empty() &&
+		    !draw_centered(result, clock_strings.date, caption_row, frame.date_baseline_y)) {
 			return {};
 		}
-		if (!draw_centered(result, content.time, time_row, frame.time_baseline_y, frame.colon_offset_px)) {
+		if (!draw_centered(result, clock_strings.time, time_row, frame.time_baseline_y,
+				   frame.colon_offset_px)) {
 			return {};
 		}
-		if (!content.meridiem.empty() &&
-		    !draw_centered(result, content.meridiem, caption_row, frame.meridiem_baseline_y)) {
+		if (!clock_strings.meridiem.empty() &&
+		    !draw_centered(result, clock_strings.meridiem, caption_row, frame.meridiem_baseline_y)) {
 			return {};
 		}
 		return result;
@@ -666,8 +668,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	std::optional<row_extents> date_extents;
-	if (style.format != date_format::none) {
-		date_extents = date_reference_extents(caption_measurer, style.format);
+	if (style.date_format != date_format::none) {
+		date_extents = date_reference_extents(caption_measurer, style.date_format);
 		if (date_extents->width <= 0) {
 			return nullptr;
 		}
