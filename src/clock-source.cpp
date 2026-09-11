@@ -217,7 +217,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 	obs_properties_t *appearance_props = obs_properties_create();
 	obs_properties_add_color(appearance_props, settings::color_name, obs_module_text("ClockSource.Color"));
 	obs_properties_add_bool(appearance_props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
-	obs_properties_add_group(props, "color_and_shadow_group", obs_module_text("ClockSrouce.TextAppearanceGroup"),
+	obs_properties_add_group(props, "color_and_shadow_group", obs_module_text("ClockSource.TextAppearanceGroup"),
 				 OBS_GROUP_NORMAL, appearance_props);
 
 	return props;
