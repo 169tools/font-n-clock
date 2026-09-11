@@ -173,7 +173,9 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
-	obs_property_t *date_list = obs_properties_add_list(props, settings::date_format_name,
+	obs_properties_t *format_props = obs_properties_create();
+
+	obs_property_t *date_list = obs_properties_add_list(format_props, settings::date_format_name,
 							    obs_module_text("ClockSource.DateFormat"),
 							    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	for (const date_format_option &option : date_format_options) {
@@ -183,7 +185,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 		obs_property_list_add_string(date_list, name.c_str(), option.id);
 	}
 
-	obs_property_t *time_list = obs_properties_add_list(props, settings::twelve_hour_name,
+	obs_property_t *time_list = obs_properties_add_list(format_props, settings::twelve_hour_name,
 							    obs_module_text("ClockSource.TimeFormat"),
 							    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_BOOL);
 	const std::string sample_24h = format_time(sample_hour, sample_minute, false);
@@ -192,20 +194,32 @@ obs_properties_t *clock_source_get_properties(void *data)
 	obs_property_list_add_bool(time_list, sample_24h.c_str(), false);
 	obs_property_list_add_bool(time_list, sample_12h.c_str(), true);
 
-	obs_properties_add_text(props, settings::font_display_name, obs_module_text("ClockSource.Font"), OBS_TEXT_INFO);
-	obs_properties_add_button2(props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
-				   clock_source_select_font, data);
+	obs_properties_add_group(props, "format_group", obs_module_text("ClockSource.FormatGroup"), OBS_GROUP_NORMAL,
+				 format_props);
 
-	obs_properties_add_int_slider(props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200, 1);
-	obs_properties_add_int_slider(props, settings::row_spacing_percent_name,
-				      obs_module_text("ClockSource.RowSpacing"), 10, 30, 1);
-	obs_properties_add_int_slider(props, settings::colon_offset_percent_name,
+	obs_properties_t *layout_props = obs_properties_create();
+	obs_properties_add_text(layout_props, settings::font_display_name, obs_module_text("ClockSource.Font"),
+				OBS_TEXT_INFO);
+	obs_properties_add_button2(layout_props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
+				   clock_source_select_font, data);
+	obs_properties_add_int_slider(layout_props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200,
+				      1);
+	obs_properties_add_int_slider(layout_props, settings::colon_offset_percent_name,
 				      obs_module_text("ClockSource.ColonOffsetPercent"),
 				      settings::colon_offset_percent_min, settings::colon_offset_percent_max, 1);
-	obs_properties_add_int_slider(props, settings::tracking_percent_name,
+	obs_properties_add_int_slider(layout_props, settings::row_spacing_percent_name,
+				      obs_module_text("ClockSource.RowSpacing"), 10, 30, 1);
+	obs_properties_add_int_slider(layout_props, settings::tracking_percent_name,
 				      obs_module_text("ClockSource.TrackingPercent"), -20, 10, 1);
-	obs_properties_add_color(props, settings::color_name, obs_module_text("ClockSource.Color"));
-	obs_properties_add_bool(props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
+	obs_properties_add_group(props, "layout_group", obs_module_text("ClockSource.TextLayoutGroup"),
+				 OBS_GROUP_NORMAL, layout_props);
+
+	obs_properties_t *appearance_props = obs_properties_create();
+	obs_properties_add_color(appearance_props, settings::color_name, obs_module_text("ClockSource.Color"));
+	obs_properties_add_bool(appearance_props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
+	obs_properties_add_group(props, "color_and_shadow_group", obs_module_text("ClockSrouce.TextAppearanceGroup"),
+				 OBS_GROUP_NORMAL, appearance_props);
+
 	return props;
 }
 
