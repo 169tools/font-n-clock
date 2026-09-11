@@ -231,7 +231,7 @@ public:
 	CFPtr<CGColorSpaceRef> space;
 	clock_frame frame;
 
-	rendered_text render(const clock_content &content) const override
+	rendered_text render(const clock_strings &clock_strings) const override
 	{
 		const row_style caption_row = {
 			.font = caption_font.get(),
@@ -246,21 +246,21 @@ public:
 		};
 
 		CFPtr<CTLineRef> date_line;
-		if (!content.date.empty()) {
-			date_line = make_line(content.date, caption_row);
+		if (!clock_strings.date.empty()) {
+			date_line = make_line(clock_strings.date, caption_row);
 			if (!date_line) {
 				return {};
 			}
 		}
 
-		CFPtr<CTLineRef> time_line = make_line(content.time, time_row);
+		CFPtr<CTLineRef> time_line = make_line(clock_strings.time, time_row);
 		if (!time_line) {
 			return {};
 		}
 
 		CFPtr<CTLineRef> meridiem_line;
-		if (!content.meridiem.empty()) {
-			meridiem_line = make_line(content.meridiem, caption_row);
+		if (!clock_strings.meridiem.empty()) {
+			meridiem_line = make_line(clock_strings.meridiem, caption_row);
 			if (!meridiem_line) {
 				return {};
 			}
@@ -360,8 +360,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	std::optional<row_extents> date_extents;
-	if (style.format != date_format::none) {
-		date_extents = date_reference_extents(caption_measurer, style.format);
+	if (style.date_format != date_format::none) {
+		date_extents = date_reference_extents(caption_measurer, style.date_format);
 		if (date_extents->width <= 0) {
 			return nullptr;
 		}

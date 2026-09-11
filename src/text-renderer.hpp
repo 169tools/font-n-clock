@@ -40,7 +40,7 @@ enum class date_format {
 };
 
 struct clock_style {
-	date_format format = date_format::month_day_weekday;
+	date_format date_format = date_format::month_day_weekday;
 	bool twelve_hour = false;
 	std::string font_face;
 	std::string font_style;
@@ -70,7 +70,7 @@ struct rendered_text {
 	bool valid() const noexcept { return width > 0 && height > 0 && !pixels.empty(); }
 };
 
-struct clock_content {
+struct clock_strings {
 	std::string date;
 	std::string time;
 	std::string meridiem;
@@ -134,7 +134,7 @@ public:
 	prepared_clock(const prepared_clock &) = delete;
 	prepared_clock &operator=(const prepared_clock &) = delete;
 
-	virtual rendered_text render(const clock_content &content) const = 0;
+	virtual rendered_text render(const clock_strings &clock_strings) const = 0;
 
 protected:
 	prepared_clock() = default;

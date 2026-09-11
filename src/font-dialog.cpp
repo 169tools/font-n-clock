@@ -47,9 +47,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 constexpr double preview_size = 30;
 
-QPixmap render_preview(const QString &family, const QString &style, const date_format format, const bool twelve_hour)
+QPixmap render_preview(const QString &family, const QString &style, const date_format date_format,
+		       const bool twelve_hour)
 {
-	clock_style spec{.format = format, .twelve_hour = twelve_hour};
+	clock_style spec{.date_format = date_format, .twelve_hour = twelve_hour};
 	spec.font_face = family.toStdString();
 	spec.font_style = style.toStdString();
 	spec.size = preview_size;
@@ -63,7 +64,7 @@ QPixmap render_preview(const QString &family, const QString &style, const date_f
 	}
 
 	const rendered_text bitmap = clock->render({
-		.date = format_date(format, sample_month, sample_day, sample_weekday),
+		.date = format_date(date_format, sample_month, sample_day, sample_weekday),
 		.time = format_time(sample_hour, sample_minute, twelve_hour),
 		.meridiem = format_meridiem(sample_hour, twelve_hour),
 	});
