@@ -18,14 +18,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "compositor.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <numbers>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <util/base.h>
 #include <util/windows/ComPtr.hpp>
 
 #include "layout.hpp"
+#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
@@ -388,6 +391,9 @@ public:
 
 	rendered_text render(const clock_strings &clock_strings) const override
 	{
+		using clock = std::chrono::steady_clock;
+		const auto started = clock::now();
+
 		std::vector<text_layer> layers;
 		const auto add_layer = [&](const std::string &text, const row_format &row, const double baseline_y,
 					   const double width_px, const double colon_offset_px = 0) {
@@ -416,7 +422,16 @@ public:
 			       caption_outline_width_px)) {
 			return {};
 		}
-		return composite_text(layers, composite);
+		const auto drawn = clock::now();
+		rendered_text result = composite_text(layers, composite);
+		const auto composited = clock::now();
+
+		const auto ms = [](const auto from, const auto to) {
+			return std::chrono::duration<double, std::milli>(to - from).count();
+		};
+		obs_log(LOG_INFO, "render %ux%u: directwrite %.2f ms, composite %.2f ms", frame.width, frame.height,
+			ms(started, drawn), ms(drawn, composited));
+		return result;
 	}
 
 private:
