@@ -23,11 +23,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-properties.h>
 #include <obs-source.h>
 #include <obs.h>
+#include <util/base.h>
 
 #include "font-dialog.hpp"
+#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -350,7 +353,11 @@ int suggested_colon_offset_percent(const std::string &font_face, const std::stri
 
 static void clock_source_rebuild_texture(clock_source *context)
 {
+	using clock = std::chrono::steady_clock;
+	const auto started = clock::now();
+
 	const rendered_text bitmap = context->clock ? context->clock->render(context->strings) : rendered_text{};
+	const auto rendered = clock::now();
 	if (!bitmap.valid()) {
 		context->texture.clear();
 		return;
@@ -371,6 +378,13 @@ static void clock_source_rebuild_texture(clock_source *context)
 		clock_texture.texture_height = bitmap.height;
 	}
 	obs_leave_graphics();
+	const auto uploaded = clock::now();
+
+	const auto ms = [](const auto from, const auto to) {
+		return std::chrono::duration<double, std::milli>(to - from).count();
+	};
+	obs_log(LOG_INFO, "rebuild %ux%u: render %.2f ms, upload %.2f ms", bitmap.width, bitmap.height,
+		ms(started, rendered), ms(rendered, uploaded));
 }
 
 bool refresh_content(clock_source *context)
