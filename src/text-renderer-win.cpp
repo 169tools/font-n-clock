@@ -509,7 +509,7 @@ private:
 				const std::size_t source = (static_cast<std::size_t>(y) * texture_width + x) * 3;
 				const float value =
 					(alpha[source] + alpha[source + 1] + alpha[source + 2]) / (3.0f * 255.0f);
-				float &target = coverage.pixels[static_cast<std::size_t>(ty) + coverage.width + tx];
+				float &target = coverage.pixels[static_cast<std::size_t>(ty) * coverage_width + tx];
 				target = std::max(target, value);
 			}
 		}
