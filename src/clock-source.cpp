@@ -294,6 +294,9 @@ void clock_source_update(void *data, obs_data_t *settings)
 void clock_source_video_tick(void *data, float)
 {
 	auto *context = static_cast<clock_source *>(data);
+	if (!obs_source_showing(context->source)) {
+		return;
+	}
 	if (!refresh_content(context)) {
 		return;
 	}
