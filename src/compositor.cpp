@@ -28,6 +28,19 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <vector>
 
 namespace {
+struct rgba;
+rgba decode(const std::uint32_t abgr);
+std::uint8_t to_byte(const float value);
+void blend_over(float *base, const rgba &color, const float alpha);
+std::vector<float> distance_to_ink(const std::vector<float> &coverage, const long width, const long height,
+				   const float max_dist);
+void box_horizontal_blur(const std::vector<float> &source, std::vector<float> &target, const long width,
+			 const long height, const long radius);
+void box_vertical_blur(const std::vector<float> &source, std::vector<float> &target, const long width,
+		       const long height, const long radius);
+std::vector<float> shadow_alpha(const std::vector<float> &shape, const long width, const long height,
+				const shadow_style &shadow);
+
 struct rgba {
 	float r = 0;
 	float g = 0;
@@ -68,16 +81,40 @@ void blend_over(float *base, const rgba &color, const float alpha)
 std::vector<float> distance_to_ink(const std::vector<float> &coverage, const long width, const long height,
 				   const float max_dist)
 {
-	std::vector<horizontal_nearest_ink> horizontal(coverage.size(), {max_dist, 0.0f});
+	long min_x = width;
+	long max_x = -1;
+	long min_y = height;
+	long max_y = -1;
 	for (long y = 0; y < height; ++y) {
+		for (long x = 0; x < width; ++x) {
+			if (coverage[static_cast<std::size_t>(y) * width + x] > 0.0f) {
+				min_x = std::min(min_x, x);
+				max_x = std::max(max_x, x);
+				min_y = std::min(min_y, y);
+				max_y = std::max(max_y, y);
+			}
+		}
+	}
+	std::vector<float> dist(coverage.size(), max_dist);
+	if (max_x < 0) {
+		return dist;
+	}
+	const long reach = static_cast<long>(std::ceil(max_dist));
+	const long x0 = std::max(0L, min_x - reach);
+	const long x1 = std::min(width - 1, max_x + reach);
+	const long y0 = std::max(0L, min_y - reach);
+	const long y1 = std::min(height - 1, max_y + reach);
+
+	std::vector<horizontal_nearest_ink> horizontal(coverage.size(), {max_dist, 0.0f});
+	for (long y = y0; y <= y1; ++y) {
 		const std::size_t row = static_cast<std::size_t>(y) * width;
 
 		for (const bool leftward : {false, true}) {
 			horizontal_nearest_ink running = {max_dist, 0.0f};
-			for (long i = 0; i < width; ++i) {
+			for (long i = x0; i <= x1; ++i) {
 				running.dx = std::min(max_dist, running.dx + 1);
 
-				const long x = leftward ? width - 1 - i : i;
+				const long x = leftward ? x0 + x1 - i : i;
 				const float coverage_value = coverage[row + x];
 				if (coverage_value > 0.0f) {
 					const horizontal_nearest_ink here = {0.0f, 0.5f - coverage_value};
@@ -92,10 +129,8 @@ std::vector<float> distance_to_ink(const std::vector<float> &coverage, const lon
 		}
 	}
 
-	std::vector<float> dist(coverage.size(), max_dist);
-	const long reach = static_cast<long>(std::ceil(max_dist));
-	for (long y = 0; y < height; ++y) {
-		for (long x = 0; x < width; ++x) {
+	for (long y = y0; y <= y1; ++y) {
+		for (long x = x0; x <= x1; ++x) {
 			float best = max_dist;
 			for (long dy = -reach; dy <= reach; ++dy) {
 				const long yy = y + dy;
@@ -193,39 +228,50 @@ std::vector<float> shadow_alpha(const std::vector<float> &shape, const long widt
 }
 } // namespace
 
-rendered_text composite_text(const text_coverage &coverage, const composite_style &style)
+rendered_text composite_text(const std::vector<text_layer> &layers, const composite_style &style)
 {
-	if (!coverage.valid()) {
+	if (layers.empty() || !layers.front().coverage.valid()) {
 		return {};
 	}
-	const long width = coverage.width;
-	const long height = coverage.height;
-	const std::vector<float> &coverage_pixels = coverage.pixels;
+	const text_coverage &first = layers.front().coverage;
+	const long width = first.width;
+	const long height = first.height;
+	const std::size_t size = first.pixels.size();
 
-	std::vector<float> ring;
-	if (style.outline_width_px > 0) {
-		const auto max_dist = static_cast<float>(style.outline_width_px);
-		const std::vector<float> dist = distance_to_ink(coverage_pixels, width, height, max_dist + 1);
-		ring.resize(coverage_pixels.size());
-		for (std::size_t i = 0; i < ring.size(); ++i) {
-			ring[i] = std::clamp(max_dist + 0.5f - dist[i], 0.0f, 1.0f);
+	for (const text_layer &layer : layers) {
+		if (layer.coverage.width != first.width || layer.coverage.height != first.height ||
+		    layer.coverage.pixels.size() != size) {
+			return {};
+		}
+	}
+
+	std::vector<float> fill(size, 0.0f);
+	std::vector<float> ring(size, 0.0f);
+	for (const text_layer &layer : layers) {
+		for (std::size_t i = 0; i < size; ++i) {
+			fill[i] = std::max(fill[i], layer.coverage.pixels[i]);
+		}
+		if (layer.outline_width_px <= 0) {
+			continue;
+		}
+		const auto w = static_cast<float>(layer.outline_width_px);
+		const std::vector<float> dist = distance_to_ink(layer.coverage.pixels, width, height, w + 1);
+		for (std::size_t i = 0; i < size; ++i) {
+			ring[i] = std::max(ring[i], std::clamp(w + 0.5f - dist[i], 0.0f, 1.0f));
 		}
 	}
 
 	const rgba fill_color = decode(style.color);
 	const rgba outline_color = decode(style.outline_color);
-	std::vector<float> pixels(coverage_pixels.size() * 4, 0.0f);
-	bool is_ring_empty = ring.empty();
-	for (std::size_t i = 0; i < coverage_pixels.size(); ++i) {
+	std::vector<float> pixels(size * 4, 0.0f);
+	for (std::size_t i = 0; i < size; ++i) {
 		float *pixel = &pixels[i * 4];
-		if (!is_ring_empty) {
-			blend_over(pixel, outline_color, ring[i] * outline_color.a);
-		}
-		blend_over(pixel, fill_color, coverage_pixels[i] * fill_color.a);
+		blend_over(pixel, outline_color, ring[i] * outline_color.a);
+		blend_over(pixel, fill_color, fill[i] * fill_color.a);
 	}
 
 	if (style.shadow) {
-		std::vector<float> shape(coverage_pixels.size());
+		std::vector<float> shape(size);
 		for (std::size_t i = 0; i < shape.size(); ++i) {
 			shape[i] = pixels[i * 4 + 3];
 		}
@@ -237,7 +283,10 @@ rendered_text composite_text(const text_coverage &coverage, const composite_styl
 		}
 	}
 
-	rendered_text result = {.width = coverage.width, .height = coverage.height};
+	rendered_text result = {
+		.width = static_cast<std::uint32_t>(width),
+		.height = static_cast<std::uint32_t>(height),
+	};
 	result.pixels.resize(pixels.size());
 	for (std::size_t i = 0; i < pixels.size(); ++i) {
 		result.pixels[i] = to_byte(pixels[i]);

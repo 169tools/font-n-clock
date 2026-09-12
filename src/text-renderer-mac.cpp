@@ -202,20 +202,15 @@ public:
 	CFPtr<CTFontRef> time_font;
 	double caption_tracking_em = 0;
 	double time_tracking_em = 0;
+	double outline_width_px = 0;
+	double caption_outline_width_px = 0;
 	clock_frame frame;
 	composite_style composite;
 
 	rendered_text render(const clock_strings &clock_strings) const override
 	{
-		const row_style caption_row = {
-			.font = caption_font.get(),
-			.tracking_em = caption_tracking_em,
-		};
-
-		const row_style time_row = {
-			.font = time_font.get(),
-			.tracking_em = time_tracking_em,
-		};
+		const row_style caption_row = {.font = caption_font.get(), .tracking_em = caption_tracking_em};
+		const row_style time_row = {.font = time_font.get(), .tracking_em = time_tracking_em};
 
 		CFPtr<CTLineRef> date_line;
 		if (!clock_strings.date.empty()) {
@@ -251,22 +246,30 @@ public:
 		CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
 		CGContextSetGrayFillColor(context.get(), 1, 1);
 
-		if (date_line) {
-			draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
-		}
-		draw_centered(context.get(), time_line.get(), frame.reference_width, frame.time_baseline_y,
-			      frame.colon_offset_px);
-		if (meridiem_line) {
-			draw_centered(context.get(), meridiem_line.get(), frame.reference_width,
-				      frame.meridiem_baseline_y);
-		}
+		std::vector<text_layer> layers;
+		const auto add_layer = [&](CTLineRef line, const double baseline_y, const double outline_width_px,
+					   const double colon_offset_px = 0) {
+			std::fill(alpha.begin(), alpha.end(), 0);
+			draw_centered(context.get(), line, frame.reference_width, baseline_y, colon_offset_px);
+			text_layer layer = {
+				.coverage = {.width = frame.width, .height = frame.height},
+				.outline_width_px = outline_width_px,
+			};
+			layer.coverage.pixels.resize(alpha.size());
+			for (std::size_t i = 0; i < alpha.size(); ++i) {
+				layer.coverage.pixels[i] = alpha[i] / 255.0f;
+			}
+			layers.push_back(std::move(layer));
+		};
 
-		text_coverage coverage = {.width = frame.width, .height = frame.height};
-		coverage.pixels.resize(alpha.size());
-		for (std::size_t i = 0; i < alpha.size(); ++i) {
-			coverage.pixels[i] = alpha[i] / 255.0f;
+		if (date_line) {
+			add_layer(date_line.get(), frame.date_baseline_y, caption_outline_width_px);
 		}
-		return composite_text(coverage, composite);
+		add_layer(time_line.get(), frame.time_baseline_y, outline_width_px, frame.colon_offset_px);
+		if (meridiem_line) {
+			add_layer(meridiem_line.get(), frame.meridiem_baseline_y, caption_outline_width_px);
+		}
+		return composite_text(layers, composite);
 	}
 };
 
@@ -337,12 +340,10 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->time_font = std::move(time_font);
 	clock->caption_tracking_em = style.caption_tracking_em();
 	clock->time_tracking_em = style.tracking_em;
+	clock->outline_width_px = style.outline_width_px();
+	clock->caption_outline_width_px = style.caption_outline_width_px();
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
-	clock->composite = {
-		.color = style.color,
-		.outline_color = style.outline_color,
-		.outline_width_px = style.outline_width_px(),
-	};
+	clock->composite = {.color = style.color, .outline_color = style.outline_color};
 	if (style.shadow) {
 		clock->composite.shadow = shadow_style{
 			.offset = style.shadow_offset_px(),

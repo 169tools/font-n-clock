@@ -37,11 +37,15 @@ struct text_coverage {
 	}
 };
 
+struct text_layer {
+	text_coverage coverage;
+	double outline_width_px = 0;
+};
+
 struct composite_style {
 	std::uint32_t color = 0xffffffff;
 	std::uint32_t outline_color = 0xff8c857e;
-	double outline_width_px = 0;
 	std::optional<shadow_style> shadow;
 };
 
-rendered_text composite_text(const text_coverage &coverage, const composite_style &style);
+rendered_text composite_text(const std::vector<text_layer> &layers, const composite_style &style);

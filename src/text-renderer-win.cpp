@@ -381,27 +381,43 @@ public:
 	ComPtr<IDWriteFactory> factory;
 	row_format caption_row;
 	row_format time_row;
+	double outline_width_px = 0;
+	double caption_outline_width_px = 0;
 	clock_frame frame;
 	composite_style composite;
 
 	rendered_text render(const clock_strings &clock_strings) const override
 	{
-		text_coverage coverage = {.width = frame.width, .height = frame.height};
-		coverage.pixels.assign(static_cast<std::size_t>(coverage.width) * coverage.height, 0.0f);
+		std::vector<text_layer> layers;
+		const auto add_layer = [&](const std::string &text, const row_format &row, const double baseline_y,
+					   const double outline_width_px, const double colon_offset_px = 0) {
+			text_layer layer = {
+				.coverage = {.width = frame.width, .height = frame.height},
+				.outline_width_px = outline_width_px,
+			};
+			layer.coverage.pixels.assign(static_cast<std::size_t>(frame.width) * frame.height, 0.0f);
+			if (!draw_centered(layer.coverage, clock_strings.time, time_row, frame.time_baseline_y,
+					   frame.colon_offset_px)) {
+				return false;
+			}
+			layers.push_back(std::move(layer));
+			return true;
+		};
 
 		if (!clock_strings.date.empty() &&
-		    !draw_centered(coverage, clock_strings.date, caption_row, frame.date_baseline_y)) {
+		    !add_layer(clock_strings.date, caption_row, frame.date_baseline_y, caption_outline_width_px)) {
 			return {};
 		}
-		if (!draw_centered(coverage, clock_strings.time, time_row, frame.time_baseline_y,
-				   frame.colon_offset_px)) {
+		if (!add_layer(clock_strings.time, time_row, frame.time_baseline_y, outline_width_px,
+			       frame.colon_offset_px)) {
 			return {};
 		}
 		if (!clock_strings.meridiem.empty() &&
-		    !draw_centered(coverage, clock_strings.meridiem, caption_row, frame.meridiem_baseline_y)) {
+		    !add_layer(clock_strings.meridiem, caption_row, frame.meridiem_baseline_y,
+			       caption_outline_width_px)) {
 			return {};
 		}
-		return composite_text(coverage, composite);
+		return composite_text(layers, composite);
 	}
 
 private:
@@ -568,12 +584,10 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->factory = std::move(factory);
 	clock->caption_row = caption_row;
 	clock->time_row = time_row;
+	clock->outline_width_px = style.outline_width_px();
+	clock->caption_outline_width_px = style.caption_outline_width_px();
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
-	clock->composite = {
-		.color = style.color,
-		.outline_color = style.outline_color,
-		.outline_width_px = style.outline_width_px(),
-	};
+	clock->composite = {.color = style.color, .outline_color = style.outline_color};
 	if (style.shadow) {
 		clock->composite.shadow = shadow_style{
 			.offset = style.shadow_offset_px(),
