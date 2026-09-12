@@ -163,10 +163,10 @@ void clock_source_get_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, settings::size_name, clock_style::default_size);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
-	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
+	obs_data_set_default_int(settings, settings::color_name, 0xffffffff);
 	obs_data_set_default_bool(settings, settings::outline_name, false);
 	obs_data_set_default_int(settings, settings::outline_width_name, 3);
-	obs_data_set_default_int(settings, settings::outline_color_name, 0xFF8C857E);
+	obs_data_set_default_int(settings, settings::outline_color_name, 0xff8c857e);
 	obs_data_set_default_bool(settings, settings::shadow_name, false);
 }
 
@@ -226,7 +226,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 		return true;
 	});
 	obs_properties_add_int_slider(appearance_props, settings::outline_width_name,
-				      obs_module_text("ClockSource.Outline.Width"), 1, 5, 1);
+				      obs_module_text("ClockSource.Outline.Width"), 1, 10, 1);
 	obs_properties_add_color(appearance_props, settings::outline_color_name,
 				 obs_module_text("ClockSource.Outline.Color"));
 
@@ -259,6 +259,14 @@ void clock_source_update(void *data, obs_data_t *settings)
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 	auto tracking_percent = static_cast<double>(obs_data_get_int(settings, settings::tracking_percent_name));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
+	auto outline_width = [&settings] {
+		if (obs_data_get_bool(settings, settings::outline_name)) {
+			return static_cast<std::uint32_t>(obs_data_get_int(settings, settings::outline_width_name));
+		} else {
+			return static_cast<std::uint32_t>(0);
+		}
+	}();
+	auto outline_color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::outline_color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
 
 	context->clock_style = {
@@ -270,6 +278,8 @@ void clock_source_update(void *data, obs_data_t *settings)
 		.colon_offset_ratio = colon_offset_percent / 100,
 		.tracking_em = tracking_percent / 100,
 		.color = color,
+		.outline_width = outline_width,
+		.outline_color = outline_color,
 		.shadow = shadow,
 	};
 	context->prepared_clock = prepare_clock(context->clock_style);

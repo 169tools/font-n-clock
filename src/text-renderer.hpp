@@ -50,6 +50,8 @@ struct clock_style {
 	double colon_offset_ratio = 0;
 	double tracking_em = 0;
 	std::uint32_t color = 0xffffffff;
+	std::uint32_t outline_width = 0;
+	std::uint32_t outline_color = 0xff8c857e;
 	bool shadow = false;
 
 	double caption_ink_height() const noexcept { return size * 0.4; }
@@ -59,6 +61,7 @@ struct clock_style {
 	double top_margin() const noexcept { return size * 0.36; }
 	double bottom_margin() const noexcept { return size * 0.4; }
 	double horizontal_margin() const noexcept { return size * 0.38; }
+	double outline_width_px() const noexcept { return (outline_width / 2.0) * size / default_size; }
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 	double shadow_offset_px() const noexcept { return time_ink_height() * 0.02; }
 	double shadow_blur_px() const noexcept { return time_ink_height() * 0.1; }

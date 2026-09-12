@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "cf-ptr.hpp"
+#include "compositor.hpp"
 #include "layout.hpp"
 #include "text-renderer.hpp"
 
@@ -36,6 +37,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <CoreGraphics/CGFont.h>
 #include <CoreGraphics/CGGeometry.h>
 #include <CoreGraphics/CGImage.h>
+#include <CoreGraphics/CGPath.h>
 #include <CoreText/CTFont.h>
 #include <CoreText/CTFontDescriptor.h>
 #include <CoreText/CTFontManager.h>
@@ -58,7 +60,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 struct row_style {
 	CTFontRef font = nullptr;
-	CGColorRef color = nullptr;
 	double tracking_em = 0;
 };
 
@@ -110,21 +111,6 @@ CFPtr<CTFontRef> make_font(const std::string &face, const std::string &style, co
 	return CFPtr<CTFontRef>(CTFontCreateWithFontDescriptor(descriptor.get(), point_size, nullptr));
 }
 
-CFPtr<CGColorRef> make_color(std::uint32_t abgr)
-{
-	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
-	if (!space) {
-		return nullptr;
-	}
-	const CGFloat components[] = {
-		static_cast<CGFloat>(abgr & 0xff) / 255.0,
-		static_cast<CGFloat>((abgr >> 8) & 0xff) / 255.0,
-		static_cast<CGFloat>((abgr >> 16) & 0xff) / 255.0,
-		static_cast<CGFloat>((abgr >> 24) & 0xff) / 255.0,
-	};
-	return CFPtr<CGColorRef>(CGColorCreate(space.get(), components));
-}
-
 CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 {
 	CFPtr<CFStringRef> string = make_cfstring(text);
@@ -139,9 +125,8 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 	}
 
 	const void *keys[] = {kCTFontAttributeName, kCTTrackingAttributeName, kCTForegroundColorAttributeName};
-	const void *values[] = {row.font, tracking.get(), row.color};
-	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, row.color ? 3 : 2,
-							     &kCFTypeDictionaryKeyCallBacks,
+	const void *values[] = {row.font, tracking.get()};
+	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
 							     &kCFTypeDictionaryValueCallBacks));
 	if (!attributes) {
 		return nullptr;
@@ -154,24 +139,16 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 	return CFPtr<CTLineRef>(CTLineCreateWithAttributedString(attributed.get()));
 }
 
-CFPtr<CGColorRef> make_shadow_color(const double shadow_opacity)
-{
-	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
-	if (!space) {
-		return nullptr;
-	}
-	const CGFloat components[] = {0, 0, 0, shadow_opacity};
-	return CFPtr<CGColorRef>(CGColorCreate(space.get(), components));
-}
-
 ink_extents measure_line(CTLineRef line)
 {
 	const CGRect bounds = CTLineGetBoundsWithOptions(line, kCTLineBoundsUseGlyphPathBounds);
 
-	return {.width = bounds.size.width,
+	return {
+		.width = bounds.size.width,
 		.ascent = bounds.origin.y + bounds.size.height,
 		.descent = -bounds.origin.y,
-		.left = bounds.origin.x};
+		.left = bounds.origin.x,
+	};
 }
 
 void draw_centered(CGContextRef context, CTLineRef line, const double reference_width, const double baseline_y,
@@ -223,25 +200,20 @@ class mac_clock : public prepared_clock {
 public:
 	CFPtr<CTFontRef> caption_font;
 	CFPtr<CTFontRef> time_font;
-	CFPtr<CGColorRef> color;
 	double caption_tracking_em = 0;
 	double time_tracking_em = 0;
-	std::optional<shadow_style> shadow;
-	CFPtr<CGColorRef> shadow_color;
-	CFPtr<CGColorSpaceRef> space;
 	clock_frame frame;
+	composite_style composite;
 
 	rendered_text render(const clock_strings &clock_strings) const override
 	{
 		const row_style caption_row = {
 			.font = caption_font.get(),
-			.color = color.get(),
 			.tracking_em = caption_tracking_em,
 		};
 
 		const row_style time_row = {
 			.font = time_font.get(),
-			.color = color.get(),
 			.tracking_em = time_tracking_em,
 		};
 
@@ -266,28 +238,18 @@ public:
 			}
 		}
 
-		rendered_text result = {.width = frame.width, .height = frame.height};
-		result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
-
-		const CGBitmapInfo bitmap_info =
-			static_cast<CGBitmapInfo>(static_cast<std::uint32_t>(kCGImageAlphaPremultipliedLast) |
-						  static_cast<std::uint32_t>(kCGBitmapByteOrder32Big));
-		CFPtr<CGContextRef> context(CGBitmapContextCreate(result.pixels.data(), result.width, result.height, 8,
-								  static_cast<std::size_t>(result.width) * 4,
-								  space.get(), bitmap_info));
+		std::vector<std::uint8_t> alpha(static_cast<std::size_t>(frame.width) * frame.height, 0);
+		CFPtr<CGContextRef> context(CGBitmapContextCreate(alpha.data(), frame.width, frame.height, 8,
+								  frame.width, nullptr, kCGImageAlphaOnly));
 		if (!context) {
 			return {};
 		}
 
 		CGContextSetShouldAntialias(context.get(), true);
 		CGContextSetShouldSmoothFonts(context.get(), false);
+		CGContextSetAllowsFontSubpixelQuantization(context.get(), false);
 		CGContextSetTextMatrix(context.get(), CGAffineTransformIdentity);
-		CGContextSetFillColorWithColor(context.get(), color.get());
-
-		if (shadow) {
-			CGContextSetShadowWithColor(context.get(), CGSizeMake(0, -shadow->offset), shadow->blur,
-						    shadow_color.get());
-		}
+		CGContextSetGrayFillColor(context.get(), 1, 1);
 
 		if (date_line) {
 			draw_centered(context.get(), date_line.get(), frame.reference_width, frame.date_baseline_y);
@@ -299,7 +261,12 @@ public:
 				      frame.meridiem_baseline_y);
 		}
 
-		return result;
+		text_coverage coverage = {.width = frame.width, .height = frame.height};
+		coverage.pixels.resize(alpha.size());
+		for (std::size_t i = 0; i < alpha.size(); ++i) {
+			coverage.pixels[i] = alpha[i] / 255.0f;
+		}
+		return composite_text(coverage, composite);
 	}
 };
 
@@ -337,9 +304,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 
 	CFPtr<CTFontRef> caption_font = make_font(style.font_face, style.font_style, caption_point_size);
 	CFPtr<CTFontRef> time_font = make_font(style.font_face, style.font_style, time_point_size);
-	CFPtr<CGColorRef> color = make_color(style.color);
-	CFPtr<CGColorSpaceRef> space(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
-	if (!caption_font || !time_font || !color || !space) {
+	if (!caption_font || !time_font) {
 		return nullptr;
 	}
 
@@ -368,23 +333,22 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	auto clock = std::make_unique<mac_clock>();
-
-	if (style.shadow) {
-		CFPtr<CGColorRef> shadow_color = make_shadow_color(shadow_style::opacity);
-		if (!shadow_color) {
-			return nullptr;
-		}
-		clock->shadow = shadow_style{.offset = style.shadow_offset_px(), .blur = style.shadow_blur_px()};
-		clock->shadow_color = std::move(shadow_color);
-	}
-
 	clock->caption_font = std::move(caption_font);
 	clock->time_font = std::move(time_font);
-	clock->color = std::move(color);
 	clock->caption_tracking_em = style.caption_tracking_em();
 	clock->time_tracking_em = style.tracking_em;
-	clock->space = std::move(space);
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
+	clock->composite = {
+		.color = style.color,
+		.outline_color = style.outline_color,
+		.outline_width_px = style.outline_width_px(),
+	};
+	if (style.shadow) {
+		clock->composite.shadow = shadow_style{
+			.offset = style.shadow_offset_px(),
+			.blur = style.shadow_blur_px(),
+		};
+	}
 	return clock;
 }
 
