@@ -57,6 +57,34 @@ constexpr const char *default_font_face = "Sans Serif";
 constexpr const char *default_font_style = "Regular";
 } // namespace settings
 
+constexpr struct {
+	date_format value;
+	const char *id;
+} date_format_options[] = {
+	{date_format::month_day_weekday, "month_day_weekday"},
+	{date_format::day_month_weekday, "day_month_weekday"},
+	{date_format::month_name_day, "month_name_day"},
+	{date_format::day_month_name, "day_month_name"},
+	{date_format::none, "none"},
+};
+
+struct clock_source;
+const char *clock_source_get_name(void *);
+void *clock_source_create(obs_data_t *settings, obs_source_t *source);
+void clock_source_destroy(void *data);
+std::uint32_t clock_source_get_width(void *data);
+std::uint32_t clock_source_get_height(void *data);
+void clock_source_get_defaults(obs_data_t *settings);
+obs_properties_t *clock_source_get_properties(void *data);
+void clock_source_update(void *data, obs_data_t *settings);
+void clock_source_video_tick(void *data, float);
+void clock_source_render(void *data, gs_effect *);
+std::string font_display_text(const std::string &font_face, const std::string &font_style);
+bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data);
+int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style);
+static void clock_source_rebuild_texture(clock_source *context);
+bool refresh_content(clock_source *context);
+
 struct clock_texture {
 	gs_texture_t *texture = nullptr;
 	std::uint32_t texture_width = 0;
@@ -87,34 +115,6 @@ struct clock_source {
 
 	clock_texture clock_texture;
 };
-
-constexpr struct {
-	date_format value;
-	const char *id;
-} date_format_options[] = {
-	{date_format::month_day_weekday, "month_day_weekday"},
-	{date_format::day_month_weekday, "day_month_weekday"},
-	{date_format::month_name_day, "month_name_day"},
-	{date_format::day_month_name, "day_month_name"},
-	{date_format::none, "none"},
-};
-
-const char *clock_source_get_name(void *);
-void *clock_source_create(obs_data_t *settings, obs_source_t *source);
-void clock_source_destroy(void *data);
-std::uint32_t clock_source_get_width(void *data);
-std::uint32_t clock_source_get_height(void *data);
-void clock_source_get_defaults(obs_data_t *settings);
-obs_properties_t *clock_source_get_properties(void *data);
-void clock_source_update(void *data, obs_data_t *settings);
-void clock_source_video_tick(void *data, float);
-void clock_source_render(void *data, gs_effect *);
-
-std::string font_display_text(const std::string &font_face, const std::string &font_style);
-bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data);
-int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style);
-static void clock_source_rebuild_texture(clock_source *context);
-bool refresh_content(clock_source *context);
 
 const char *clock_source_get_name(void *)
 {
