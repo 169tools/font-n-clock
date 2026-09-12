@@ -390,14 +390,13 @@ public:
 	{
 		std::vector<text_layer> layers;
 		const auto add_layer = [&](const std::string &text, const row_format &row, const double baseline_y,
-					   const double outline_width_px, const double colon_offset_px = 0) {
+					   const double width_px, const double colon_offset_px = 0) {
 			text_layer layer = {
 				.coverage = {.width = frame.width, .height = frame.height},
-				.outline_width_px = outline_width_px,
+				.outline_width_px = width_px,
 			};
 			layer.coverage.pixels.assign(static_cast<std::size_t>(frame.width) * frame.height, 0.0f);
-			if (!draw_centered(layer.coverage, clock_strings.time, time_row, frame.time_baseline_y,
-					   frame.colon_offset_px)) {
+			if (!draw_centered(layer.coverage, text, row, baseline_y, colon_offset_px)) {
 				return false;
 			}
 			layers.push_back(std::move(layer));

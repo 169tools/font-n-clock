@@ -247,13 +247,13 @@ public:
 		CGContextSetGrayFillColor(context.get(), 1, 1);
 
 		std::vector<text_layer> layers;
-		const auto add_layer = [&](CTLineRef line, const double baseline_y, const double outline_width_px,
+		const auto add_layer = [&](CTLineRef line, const double baseline_y, const double width_px,
 					   const double colon_offset_px = 0) {
 			std::fill(alpha.begin(), alpha.end(), 0);
 			draw_centered(context.get(), line, frame.reference_width, baseline_y, colon_offset_px);
 			text_layer layer = {
 				.coverage = {.width = frame.width, .height = frame.height},
-				.outline_width_px = outline_width_px,
+				.outline_width_px = width_px,
 			};
 			layer.coverage.pixels.resize(alpha.size());
 			for (std::size_t i = 0; i < alpha.size(); ++i) {
