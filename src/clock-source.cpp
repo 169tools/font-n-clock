@@ -46,6 +46,9 @@ constexpr const char *size_name = "size";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const char *tracking_percent_name = "tracking_percent";
 constexpr const char *color_name = "color";
+constexpr const char *outline_name = "outline";
+constexpr const char *outline_color_name = "outline_color";
+constexpr const char *outline_width_name = "outline_width";
 constexpr const char *shadow_name = "shadow";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
@@ -161,6 +164,9 @@ void clock_source_get_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
 	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
+	obs_data_set_default_bool(settings, settings::outline_name, false);
+	obs_data_set_default_int(settings, settings::outline_width_name, 3);
+	obs_data_set_default_int(settings, settings::outline_color_name, 0xFF8C857E);
 	obs_data_set_default_bool(settings, settings::shadow_name, false);
 }
 
@@ -209,6 +215,21 @@ obs_properties_t *clock_source_get_properties(void *data)
 
 	obs_properties_t *appearance_props = obs_properties_create();
 	obs_properties_add_color(appearance_props, settings::color_name, obs_module_text("ClockSource.Color"));
+
+	obs_property_t *outline_prop = obs_properties_add_bool(appearance_props, settings::outline_name,
+							       obs_module_text("ClockSource.Outline"));
+	obs_property_set_modified_callback(outline_prop, [](obs_properties_t *props, obs_property_t *,
+							    obs_data_t *settings) {
+		const bool outline_enabled = obs_data_get_bool(settings, settings::outline_name);
+		obs_property_set_visible(obs_properties_get(props, settings::outline_width_name), outline_enabled);
+		obs_property_set_visible(obs_properties_get(props, settings::outline_color_name), outline_enabled);
+		return true;
+	});
+	obs_properties_add_int_slider(appearance_props, settings::outline_width_name,
+				      obs_module_text("ClockSource.Outline.Width"), 1, 5, 1);
+	obs_properties_add_color(appearance_props, settings::outline_color_name,
+				 obs_module_text("ClockSource.Outline.Color"));
+
 	obs_properties_add_bool(appearance_props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	obs_properties_add_group(props, "color_and_shadow_group", obs_module_text("ClockSource.TextAppearanceGroup"),
 				 OBS_GROUP_NORMAL, appearance_props);
