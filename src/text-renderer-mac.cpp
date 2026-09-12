@@ -328,8 +328,8 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	std::optional<row_extents> date_extents;
-	if (style.date_format != date_format::none) {
-		date_extents = date_reference_extents(caption_measurer, style.date_format);
+	if (style.format != date_format::none) {
+		date_extents = date_reference_extents(caption_measurer, style.format);
 		if (date_extents->width <= 0) {
 			return nullptr;
 		}

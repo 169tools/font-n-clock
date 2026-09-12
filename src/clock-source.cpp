@@ -110,13 +110,13 @@ void clock_texture::clear()
 struct clock_source {
 	obs_source_t *source = nullptr;
 
-	clock_style clock_style;
-	std::unique_ptr<prepared_clock> prepared_clock;
+	clock_style style;
+	std::unique_ptr<prepared_clock> clock;
 
-	clock_strings clock_strings;
+	clock_strings strings;
 	std::time_t last_read_time = 0;
 
-	clock_texture clock_texture;
+	clock_texture texture;
 };
 
 const char *clock_source_get_name(void *)
@@ -135,18 +135,18 @@ void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 void clock_source_destroy(void *data)
 {
 	auto *context = static_cast<clock_source *>(data);
-	context->clock_texture.clear();
+	context->texture.clear();
 	delete context;
 }
 
 std::uint32_t clock_source_get_width(void *data)
 {
-	return static_cast<clock_source *>(data)->clock_texture.texture_width;
+	return static_cast<clock_source *>(data)->texture.texture_width;
 }
 
 std::uint32_t clock_source_get_height(void *data)
 {
-	return static_cast<clock_source *>(data)->clock_texture.texture_height;
+	return static_cast<clock_source *>(data)->texture.texture_height;
 }
 
 void clock_source_get_defaults(obs_data_t *settings)
@@ -269,8 +269,8 @@ void clock_source_update(void *data, obs_data_t *settings)
 	auto outline_color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::outline_color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
 
-	context->clock_style = {
-		.date_format = date_format,
+	context->style = {
+		.format = date_format,
 		.twelve_hour = twelve_hour,
 		.font_face = font_face,
 		.font_style = font_style,
@@ -282,7 +282,7 @@ void clock_source_update(void *data, obs_data_t *settings)
 		.outline_color = outline_color,
 		.shadow = shadow,
 	};
-	context->prepared_clock = prepare_clock(context->clock_style);
+	context->clock = prepare_clock(context->style);
 	context->last_read_time = 0;
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
@@ -300,13 +300,13 @@ void clock_source_video_tick(void *data, float)
 void clock_source_render(void *data, gs_effect *)
 {
 	auto *context = static_cast<clock_source *>(data);
-	if (!context->clock_texture.texture) {
+	if (!context->texture.texture) {
 		return;
 	}
 
 	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);
 	while (gs_effect_loop(effect, "Draw")) {
-		obs_source_draw(context->clock_texture.texture, 0, 0, 0, 0, false);
+		obs_source_draw(context->texture.texture, 0, 0, 0, 0, false);
 	}
 }
 
@@ -322,7 +322,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 
 	std::string font_face = obs_data_get_string(settings, settings::font_face_name);
 	std::string font_style = obs_data_get_string(settings, settings::font_style_name);
-	if (!select_font(font_face, font_style, context->clock_style.date_format, context->clock_style.twelve_hour)) {
+	if (!select_font(font_face, font_style, context->style.format, context->style.twelve_hour)) {
 		obs_data_release(settings);
 		return false;
 	}
@@ -350,16 +350,15 @@ int suggested_colon_offset_percent(const std::string &font_face, const std::stri
 
 static void clock_source_rebuild_texture(clock_source *context)
 {
-	const rendered_text bitmap = context->prepared_clock ? context->prepared_clock->render(context->clock_strings)
-							     : rendered_text{};
+	const rendered_text bitmap = context->clock ? context->clock->render(context->strings) : rendered_text{};
 	if (!bitmap.valid()) {
-		context->clock_texture.clear();
+		context->texture.clear();
 		return;
 	}
 	const std::uint8_t *rows = bitmap.pixels.data();
 
 	obs_enter_graphics();
-	clock_texture &clock_texture = context->clock_texture;
+	clock_texture &clock_texture = context->texture;
 	if (clock_texture.texture && clock_texture.texture_width == bitmap.width &&
 	    clock_texture.texture_height == bitmap.height) {
 		gs_texture_set_image(clock_texture.texture, rows, bitmap.width * 4, false);
@@ -394,15 +393,15 @@ bool refresh_content(clock_source *context)
 	const int minute = std::clamp(local.tm_min, 0, 59);
 	const int weekday = std::clamp(local.tm_wday, 0, 6);
 
-	std::string date = format_date(context->clock_style.date_format, month, day, weekday);
-	std::string time = format_time(hour, minute, context->clock_style.twelve_hour);
-	const char *meridiem = format_meridiem(hour, context->clock_style.twelve_hour);
+	std::string date = format_date(context->style.format, month, day, weekday);
+	std::string time = format_time(hour, minute, context->style.twelve_hour);
+	const char *meridiem = format_meridiem(hour, context->style.twelve_hour);
 
-	const clock_strings clock_strings = context->clock_strings;
+	const clock_strings clock_strings = context->strings;
 	if (date == clock_strings.date && time == clock_strings.time && meridiem == clock_strings.meridiem) {
 		return false;
 	}
-	context->clock_strings = {.date = date, .time = time, .meridiem = meridiem};
+	context->strings = {.date = date, .time = time, .meridiem = meridiem};
 	return true;
 }
 

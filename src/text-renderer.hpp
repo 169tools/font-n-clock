@@ -42,7 +42,7 @@ enum class date_format {
 struct clock_style {
 	static constexpr int default_size = 50;
 
-	date_format date_format = date_format::month_day_weekday;
+	date_format format = date_format::month_day_weekday;
 	bool twelve_hour = false;
 	std::string font_face;
 	std::string font_style;
