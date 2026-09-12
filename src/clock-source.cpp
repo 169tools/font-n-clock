@@ -23,11 +23,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-properties.h>
 #include <obs-source.h>
 #include <obs.h>
+#include <util/base.h>
 
 #include "font-dialog.hpp"
+#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -46,6 +49,9 @@ constexpr const char *size_name = "size";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const char *tracking_percent_name = "tracking_percent";
 constexpr const char *color_name = "color";
+constexpr const char *outline_name = "outline";
+constexpr const char *outline_color_name = "outline_color";
+constexpr const char *outline_width_name = "outline_width";
 constexpr const char *shadow_name = "shadow";
 constexpr const int colon_offset_percent_min = -10;
 constexpr const int colon_offset_percent_max = 50;
@@ -107,13 +113,13 @@ void clock_texture::clear()
 struct clock_source {
 	obs_source_t *source = nullptr;
 
-	clock_style clock_style;
-	std::unique_ptr<prepared_clock> prepared_clock;
+	clock_style style;
+	std::unique_ptr<prepared_clock> clock;
 
-	clock_strings clock_strings;
+	clock_strings strings;
 	std::time_t last_read_time = 0;
 
-	clock_texture clock_texture;
+	clock_texture texture;
 };
 
 const char *clock_source_get_name(void *)
@@ -132,18 +138,18 @@ void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 void clock_source_destroy(void *data)
 {
 	auto *context = static_cast<clock_source *>(data);
-	context->clock_texture.clear();
+	context->texture.clear();
 	delete context;
 }
 
 std::uint32_t clock_source_get_width(void *data)
 {
-	return static_cast<clock_source *>(data)->clock_texture.texture_width;
+	return static_cast<clock_source *>(data)->texture.texture_width;
 }
 
 std::uint32_t clock_source_get_height(void *data)
 {
-	return static_cast<clock_source *>(data)->clock_texture.texture_height;
+	return static_cast<clock_source *>(data)->texture.texture_height;
 }
 
 void clock_source_get_defaults(obs_data_t *settings)
@@ -160,7 +166,10 @@ void clock_source_get_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, settings::size_name, clock_style::default_size);
 	obs_data_set_default_int(settings, settings::colon_offset_percent_name, colon_offset_percent);
 	obs_data_set_default_int(settings, settings::tracking_percent_name, 0);
-	obs_data_set_default_int(settings, settings::color_name, 0xFFFFFFFF);
+	obs_data_set_default_int(settings, settings::color_name, 0xffffffff);
+	obs_data_set_default_bool(settings, settings::outline_name, false);
+	obs_data_set_default_int(settings, settings::outline_width_name, 3);
+	obs_data_set_default_int(settings, settings::outline_color_name, 0xff8c857e);
 	obs_data_set_default_bool(settings, settings::shadow_name, false);
 }
 
@@ -209,6 +218,21 @@ obs_properties_t *clock_source_get_properties(void *data)
 
 	obs_properties_t *appearance_props = obs_properties_create();
 	obs_properties_add_color(appearance_props, settings::color_name, obs_module_text("ClockSource.Color"));
+
+	obs_property_t *outline_prop = obs_properties_add_bool(appearance_props, settings::outline_name,
+							       obs_module_text("ClockSource.Outline"));
+	obs_property_set_modified_callback(outline_prop, [](obs_properties_t *props, obs_property_t *,
+							    obs_data_t *settings) {
+		const bool outline_enabled = obs_data_get_bool(settings, settings::outline_name);
+		obs_property_set_visible(obs_properties_get(props, settings::outline_width_name), outline_enabled);
+		obs_property_set_visible(obs_properties_get(props, settings::outline_color_name), outline_enabled);
+		return true;
+	});
+	obs_properties_add_int_slider(appearance_props, settings::outline_width_name,
+				      obs_module_text("ClockSource.Outline.Width"), 1, 10, 1);
+	obs_properties_add_color(appearance_props, settings::outline_color_name,
+				 obs_module_text("ClockSource.Outline.Color"));
+
 	obs_properties_add_bool(appearance_props, settings::shadow_name, obs_module_text("ClockSource.Shadow"));
 	obs_properties_add_group(props, "color_and_shadow_group", obs_module_text("ClockSource.TextAppearanceGroup"),
 				 OBS_GROUP_NORMAL, appearance_props);
@@ -238,10 +262,18 @@ void clock_source_update(void *data, obs_data_t *settings)
 		static_cast<double>(obs_data_get_int(settings, settings::colon_offset_percent_name));
 	auto tracking_percent = static_cast<double>(obs_data_get_int(settings, settings::tracking_percent_name));
 	auto color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::color_name));
+	auto outline_width = [&settings] {
+		if (obs_data_get_bool(settings, settings::outline_name)) {
+			return static_cast<std::uint32_t>(obs_data_get_int(settings, settings::outline_width_name));
+		} else {
+			return static_cast<std::uint32_t>(0);
+		}
+	}();
+	auto outline_color = static_cast<std::uint32_t>(obs_data_get_int(settings, settings::outline_color_name));
 	auto shadow = static_cast<bool>(obs_data_get_bool(settings, settings::shadow_name));
 
-	context->clock_style = {
-		.date_format = date_format,
+	context->style = {
+		.format = date_format,
 		.twelve_hour = twelve_hour,
 		.font_face = font_face,
 		.font_style = font_style,
@@ -249,9 +281,11 @@ void clock_source_update(void *data, obs_data_t *settings)
 		.colon_offset_ratio = colon_offset_percent / 100,
 		.tracking_em = tracking_percent / 100,
 		.color = color,
+		.outline_width = outline_width,
+		.outline_color = outline_color,
 		.shadow = shadow,
 	};
-	context->prepared_clock = prepare_clock(context->clock_style);
+	context->clock = prepare_clock(context->style);
 	context->last_read_time = 0;
 	refresh_content(context);
 	clock_source_rebuild_texture(context);
@@ -260,6 +294,9 @@ void clock_source_update(void *data, obs_data_t *settings)
 void clock_source_video_tick(void *data, float)
 {
 	auto *context = static_cast<clock_source *>(data);
+	if (!obs_source_showing(context->source)) {
+		return;
+	}
 	if (!refresh_content(context)) {
 		return;
 	}
@@ -269,13 +306,13 @@ void clock_source_video_tick(void *data, float)
 void clock_source_render(void *data, gs_effect *)
 {
 	auto *context = static_cast<clock_source *>(data);
-	if (!context->clock_texture.texture) {
+	if (!context->texture.texture) {
 		return;
 	}
 
 	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA);
 	while (gs_effect_loop(effect, "Draw")) {
-		obs_source_draw(context->clock_texture.texture, 0, 0, 0, 0, false);
+		obs_source_draw(context->texture.texture, 0, 0, 0, 0, false);
 	}
 }
 
@@ -291,7 +328,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data)
 
 	std::string font_face = obs_data_get_string(settings, settings::font_face_name);
 	std::string font_style = obs_data_get_string(settings, settings::font_style_name);
-	if (!select_font(font_face, font_style, context->clock_style.date_format, context->clock_style.twelve_hour)) {
+	if (!select_font(font_face, font_style, context->style.format, context->style.twelve_hour)) {
 		obs_data_release(settings);
 		return false;
 	}
@@ -319,16 +356,19 @@ int suggested_colon_offset_percent(const std::string &font_face, const std::stri
 
 static void clock_source_rebuild_texture(clock_source *context)
 {
-	const rendered_text bitmap = context->prepared_clock ? context->prepared_clock->render(context->clock_strings)
-							     : rendered_text{};
+	using clock = std::chrono::steady_clock;
+	const auto started = clock::now();
+
+	const rendered_text bitmap = context->clock ? context->clock->render(context->strings) : rendered_text{};
+	const auto rendered = clock::now();
 	if (!bitmap.valid()) {
-		context->clock_texture.clear();
+		context->texture.clear();
 		return;
 	}
 	const std::uint8_t *rows = bitmap.pixels.data();
 
 	obs_enter_graphics();
-	clock_texture &clock_texture = context->clock_texture;
+	clock_texture &clock_texture = context->texture;
 	if (clock_texture.texture && clock_texture.texture_width == bitmap.width &&
 	    clock_texture.texture_height == bitmap.height) {
 		gs_texture_set_image(clock_texture.texture, rows, bitmap.width * 4, false);
@@ -341,6 +381,13 @@ static void clock_source_rebuild_texture(clock_source *context)
 		clock_texture.texture_height = bitmap.height;
 	}
 	obs_leave_graphics();
+	const auto uploaded = clock::now();
+
+	const auto ms = [](const auto from, const auto to) {
+		return std::chrono::duration<double, std::milli>(to - from).count();
+	};
+	obs_log(LOG_INFO, "rebuild %ux%u: render %.2f ms, upload %.2f ms", bitmap.width, bitmap.height,
+		ms(started, rendered), ms(rendered, uploaded));
 }
 
 bool refresh_content(clock_source *context)
@@ -363,15 +410,15 @@ bool refresh_content(clock_source *context)
 	const int minute = std::clamp(local.tm_min, 0, 59);
 	const int weekday = std::clamp(local.tm_wday, 0, 6);
 
-	std::string date = format_date(context->clock_style.date_format, month, day, weekday);
-	std::string time = format_time(hour, minute, context->clock_style.twelve_hour);
-	const char *meridiem = format_meridiem(hour, context->clock_style.twelve_hour);
+	std::string date = format_date(context->style.format, month, day, weekday);
+	std::string time = format_time(hour, minute, context->style.twelve_hour);
+	const char *meridiem = format_meridiem(hour, context->style.twelve_hour);
 
-	const clock_strings clock_strings = context->clock_strings;
+	const clock_strings clock_strings = context->strings;
 	if (date == clock_strings.date && time == clock_strings.time && meridiem == clock_strings.meridiem) {
 		return false;
 	}
-	context->clock_strings = {.date = date, .time = time, .meridiem = meridiem};
+	context->strings = {.date = date, .time = time, .meridiem = meridiem};
 	return true;
 }
 

@@ -16,14 +16,19 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include "compositor.hpp"
+
+#include <chrono>
 #include <cmath>
 #include <numbers>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <util/base.h>
 #include <util/windows/ComPtr.hpp>
 
 #include "layout.hpp"
+#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
@@ -77,11 +82,6 @@ std::string to_utf8(const std::wstring &value)
 	WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), utf8.data(), length, nullptr,
 			    nullptr);
 	return utf8;
-}
-
-std::uint8_t to_byte(const double value)
-{
-	return static_cast<std::uint8_t>(std::clamp(std::lround(value * 255), 0L, 255L));
 }
 
 std::wstring preferred_name(IDWriteLocalizedStrings *names)
@@ -181,49 +181,6 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 	}
 	format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 	return format;
-}
-
-void box_blur_horizontal(const std::vector<double> &source, std::vector<double> &target, const long width,
-			 const long height, const long radius)
-{
-	const double scale = 1.0 / (radius * 2 + 1);
-	for (long y = 0; y < height; ++y) {
-		const std::size_t row = static_cast<std::size_t>(y) * width;
-		double sum = 0;
-		for (long x = 0; x <= radius && x < width; ++x) {
-			sum += source[row + x];
-		}
-		for (long x = 0; x < width; ++x) {
-			target[row + x] = sum * scale;
-			if (x + radius + 1 < width) {
-				sum += source[row + x + radius + 1];
-			}
-			if (x - radius >= 0) {
-				sum -= source[row + x - radius];
-			}
-		}
-	}
-}
-
-void box_blur_vertical(const std::vector<double> &source, std::vector<double> &target, const long width,
-		       const long height, const long radius)
-{
-	const double scale = 1.0 / (radius * 2 + 1);
-	for (long x = 0; x < width; ++x) {
-		double sum = 0;
-		for (long y = 0; y <= radius && y < height; ++y) {
-			sum += source[static_cast<std::size_t>(y) * width + x];
-		}
-		for (long y = 0; y < height; ++y) {
-			target[static_cast<std::size_t>(y) * width + x] = sum * scale;
-			if (y + radius + 1 < height) {
-				sum += source[static_cast<std::size_t>(y + radius + 1) * width + x];
-			}
-			if (y - radius >= 0) {
-				sum -= source[static_cast<std::size_t>(y - radius) * width + x];
-			}
-		}
-	}
 }
 
 struct row_format {
@@ -427,33 +384,58 @@ public:
 	ComPtr<IDWriteFactory> factory;
 	row_format caption_row;
 	row_format time_row;
-	double color_rgb[3] = {1, 1, 1};
-	double color_alpha = 1;
-	std::optional<shadow_style> shadow;
+	double outline_width_px = 0;
+	double caption_outline_width_px = 0;
 	clock_frame frame;
+	composite_style composite;
 
 	rendered_text render(const clock_strings &clock_strings) const override
 	{
-		rendered_text result = {.width = frame.width, .height = frame.height};
-		result.pixels.assign(static_cast<std::size_t>(result.width) * result.height * 4, 0);
+		using clock = std::chrono::steady_clock;
+		const auto started = clock::now();
+
+		std::vector<text_layer> layers;
+		const auto add_layer = [&](const std::string &text, const row_format &row, const double baseline_y,
+					   const double width_px, const double colon_offset_px = 0) {
+			text_layer layer = {
+				.coverage = {.width = frame.width, .height = frame.height},
+				.outline_width_px = width_px,
+			};
+			layer.coverage.pixels.assign(static_cast<std::size_t>(frame.width) * frame.height, 0.0f);
+			if (!draw_centered(layer.coverage, text, row, baseline_y, colon_offset_px)) {
+				return false;
+			}
+			layers.push_back(std::move(layer));
+			return true;
+		};
 
 		if (!clock_strings.date.empty() &&
-		    !draw_centered(result, clock_strings.date, caption_row, frame.date_baseline_y)) {
+		    !add_layer(clock_strings.date, caption_row, frame.date_baseline_y, caption_outline_width_px)) {
 			return {};
 		}
-		if (!draw_centered(result, clock_strings.time, time_row, frame.time_baseline_y,
-				   frame.colon_offset_px)) {
+		if (!add_layer(clock_strings.time, time_row, frame.time_baseline_y, outline_width_px,
+			       frame.colon_offset_px)) {
 			return {};
 		}
 		if (!clock_strings.meridiem.empty() &&
-		    !draw_centered(result, clock_strings.meridiem, caption_row, frame.meridiem_baseline_y)) {
+		    !add_layer(clock_strings.meridiem, caption_row, frame.meridiem_baseline_y,
+			       caption_outline_width_px)) {
 			return {};
 		}
+		const auto drawn = clock::now();
+		rendered_text result = composite_text(layers, composite);
+		const auto composited = clock::now();
+
+		const auto ms = [](const auto from, const auto to) {
+			return std::chrono::duration<double, std::milli>(to - from).count();
+		};
+		obs_log(LOG_INFO, "render %ux%u: directwrite %.2f ms, composite %.2f ms", frame.width, frame.height,
+			ms(started, drawn), ms(drawn, composited));
 		return result;
 	}
 
 private:
-	bool draw_centered(rendered_text &target, const std::string &text, const row_format &row,
+	bool draw_centered(text_coverage &coverage, const std::string &text, const row_format &row,
 			   const double baseline_y, const double colon_offset_px = 0) const
 	{
 		glyph_collector collector;
@@ -467,13 +449,13 @@ private:
 		}
 
 		const double origin_x = (frame.reference_width - ink->width) / 2 - ink->left;
-		const double device_y = static_cast<double>(target.height) - baseline_y;
+		const double device_y = static_cast<double>(coverage.height) - baseline_y;
 
 		for (const glyph_run &run : collector.runs) {
 			if (run.indices.empty() || !run.face) {
 				continue;
 			}
-			if (!draw_run(target, run, origin_x, device_y, colon_offset_px)) {
+			if (!draw_run(coverage, run, origin_x, device_y, colon_offset_px)) {
 				return false;
 			}
 		}
@@ -481,7 +463,7 @@ private:
 		return true;
 	}
 
-	bool draw_run(rendered_text &target, const glyph_run &run, const double origin_x, const double device_y,
+	bool draw_run(text_coverage &coverage, const glyph_run &run, const double origin_x, const double device_y,
 		      const double colon_offset_px) const
 	{
 		std::vector<DWRITE_GLYPH_OFFSET> offsets = run.offsets;
@@ -529,79 +511,23 @@ private:
 			return false;
 		}
 
-		std::vector<double> coverage(static_cast<std::size_t>(texture_width) * texture_height);
-		for (std::size_t i = 0; i < coverage.size(); ++i) {
-			coverage[i] = (alpha[i * 3] + alpha[i * 3 + 1] + alpha[i * 3 + 2]) / (3.0 * 255.0);
-		}
-		if (shadow) {
-			draw_shadow(target, coverage, texture_width, texture_height, bounds.left, bounds.top);
-		}
-
+		const long coverage_width = static_cast<long>(coverage.width);
+		const long coverage_height = static_cast<long>(coverage.height);
 		for (long y = 0; y < texture_height; ++y) {
 			for (long x = 0; x < texture_width; ++x) {
-				const std::size_t source = static_cast<std::size_t>(y) * texture_width + x;
-				blend_pixel(target, bounds.left + x, bounds.top + y, color_rgb,
-					    coverage[source] * color_alpha);
+				const long tx = bounds.left + x;
+				const long ty = bounds.top + y;
+				if (tx < 0 || ty < 0 || tx >= coverage_width || ty >= coverage_height) {
+					continue;
+				}
+				const std::size_t source = (static_cast<std::size_t>(y) * texture_width + x) * 3;
+				const float value =
+					(alpha[source] + alpha[source + 1] + alpha[source + 2]) / (3.0f * 255.0f);
+				float &target = coverage.pixels[static_cast<std::size_t>(ty) * coverage_width + tx];
+				target = std::max(target, value);
 			}
 		}
 		return true;
-	}
-
-	void draw_shadow(rendered_text &target, const std::vector<double> &coverage, const long width,
-			 const long height, const long left, const long top) const
-	{
-		constexpr int passes = 3;
-
-		// SVG の feGaussianBlur と同じ近似。幅 d = floor(sigma * 3 * sqrt(2 * pi) / 4 + 0.5) のボックスを 3 回重ねると
-		// ガウシアンに収束する。3 * sqrt(2 * pi) / 4 = 1.88。
-		const double sigma = shadow->blur / 2;
-		const long radius = std::max(1L, static_cast<long>(std::floor(sigma * 1.88 + 0.5)) / 2);
-
-		const long margin = radius * passes;
-		const long blurred_width = width + margin * 2;
-		const long blurred_height = height + margin * 2;
-
-		std::vector<double> blurred(static_cast<std::size_t>(blurred_width) * blurred_height, 0);
-		std::vector<double> scratch(blurred.size());
-		for (long y = 0; y < height; ++y) {
-			for (long x = 0; x < width; ++x) {
-				blurred[static_cast<std::size_t>(y + margin) * blurred_width + x + margin] =
-					coverage[static_cast<std::size_t>(y) * width + x];
-			}
-		}
-
-		for (int pass = 0; pass < passes; ++pass) {
-			box_blur_horizontal(blurred, scratch, blurred_width, blurred_height, radius);
-			box_blur_vertical(scratch, blurred, blurred_width, blurred_height, radius);
-		}
-
-		constexpr double black[3] = {0, 0, 0};
-		const long offset_y = std::lround(shadow->offset);
-		for (long y = 0; y < blurred_height; ++y) {
-			for (long x = 0; x < blurred_width; ++x) {
-				const std::size_t source = static_cast<std::size_t>(y) * blurred_width + x;
-				blend_pixel(target, left - margin + x, top - margin + y + offset_y, black,
-					    blurred[source] * shadow_style::opacity * color_alpha);
-			}
-		}
-	}
-
-	void blend_pixel(rendered_text &target, const long x, const long y, const double rgb[3],
-			 const double alpha) const
-	{
-		if (alpha <= 0 || x < 0 || y < 0 || x >= static_cast<long>(target.width) ||
-		    y >= static_cast<long>(target.height)) {
-			return;
-		}
-
-		const double inverse = 1.0 - alpha;
-		const std::size_t pixel = (static_cast<std::size_t>(y) * target.width + x) * 4;
-
-		for (int channel = 0; channel < 3; ++channel) {
-			const double blended = rgb[channel] * alpha + target.pixels[pixel + channel] / 255.0 * inverse;
-			target.pixels[pixel + channel] = to_byte(blended);
-		}
-		target.pixels[pixel + 3] = to_byte(alpha + target.pixels[pixel + 3] / 255.0 * inverse);
 	}
 };
 
@@ -663,25 +589,27 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	std::optional<row_extents> date_extents;
-	if (style.date_format != date_format::none) {
-		date_extents = date_reference_extents(caption_measurer, style.date_format);
+	if (style.format != date_format::none) {
+		date_extents = date_reference_extents(caption_measurer, style.format);
 		if (date_extents->width <= 0) {
 			return nullptr;
 		}
 	}
 
 	auto clock = std::make_unique<win_clock>();
-	if (style.shadow) {
-		clock->shadow = shadow_style{.offset = style.shadow_offset_px(), .blur = style.shadow_blur_px()};
-	}
 	clock->factory = std::move(factory);
 	clock->caption_row = caption_row;
 	clock->time_row = time_row;
-	clock->color_rgb[0] = static_cast<double>(style.color & 0xff) / 255.0;
-	clock->color_rgb[1] = static_cast<double>((style.color >> 8) & 0xff) / 255.0;
-	clock->color_rgb[2] = static_cast<double>((style.color >> 16) & 0xff) / 255.0;
-	clock->color_alpha = static_cast<double>((style.color >> 24) & 0xff) / 255.0;
+	clock->outline_width_px = style.outline_width_px();
+	clock->caption_outline_width_px = style.caption_outline_width_px();
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
+	clock->composite = {.color = style.color, .outline_color = style.outline_color};
+	if (style.shadow) {
+		clock->composite.shadow = shadow_style{
+			.offset = style.shadow_offset_px(),
+			.blur = style.shadow_blur_px(),
+		};
+	}
 	return clock;
 }
 
