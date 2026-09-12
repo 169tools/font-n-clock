@@ -40,7 +40,7 @@ enum class date_format {
 };
 
 struct clock_style {
-	static constexpr double default_size = 50;
+	static constexpr int default_size = 50;
 
 	date_format date_format = date_format::month_day_weekday;
 	bool twelve_hour = false;
