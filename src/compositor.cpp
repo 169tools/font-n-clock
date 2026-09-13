@@ -208,7 +208,7 @@ std::vector<float> shadow_alpha(const std::vector<float> &shape, const long widt
 	std::vector<float> horizontal_blur(shape.size());
 	for (int pass = 0; pass < passes; ++pass) {
 		box_horizontal_blur(blur, horizontal_blur, width, height, radius);
-		box_vertical_blur(horizontal_blur, blur, width, height, radius); // ここの改変は問題ない？
+		box_vertical_blur(horizontal_blur, blur, width, height, radius);
 	}
 
 	std::vector<float> result(shape.size(), 0.0f);
