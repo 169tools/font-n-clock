@@ -43,7 +43,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <Qt>
 #include <QtCore/qcontainerfwd.h>
 #include <QtGlobal>
-#include <qoverload.h>
 
 #include <memory>
 #include <string>
@@ -199,8 +198,8 @@ bool select_font(std::string &face, std::string &style, const date_format format
 	debounce->setSingleShot(true);
 	debounce->setInterval(100); // キーリピートなどでの連続更新を抑制する
 	QObject::connect(debounce, &QTimer::timeout, preview, refresh_preview);
-	QObject::connect(families, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
-	QObject::connect(styles, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
+	QObject::connect(families, &QListWidget::currentTextChanged, debounce, [debounce] { debounce->start(); });
+	QObject::connect(styles, &QListWidget::currentTextChanged, debounce, [debounce] { debounce->start(); });
 	refresh_preview();
 
 	if (dialog.exec() != QDialog::Accepted) {
