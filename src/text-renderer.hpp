@@ -18,26 +18,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include <algorithm>
+#include "clock-format.hpp"
+
 #include <cstdint>
-#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
-
-constexpr int sample_month = 1;
-constexpr int sample_day = 23;
-constexpr int sample_weekday = 5;
-constexpr int sample_hour = 19;
-constexpr int sample_minute = 45;
-
-enum class date_format {
-	month_day_weekday, // 12/31 WED
-	day_month_weekday, // 31/12 WED
-	month_name_day,    // DEC 31
-	day_month_name,    // 31 DEC
-	none,              // 日付なし
-};
 
 struct clock_style {
 	static constexpr int default_size = 50;
@@ -75,63 +61,6 @@ struct rendered_text {
 
 	bool valid() const noexcept { return width > 0 && height > 0 && !pixels.empty(); }
 };
-
-struct clock_strings {
-	std::string date;
-	std::string time;
-	std::string meridiem;
-};
-
-constexpr const char *month_names[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-				       "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
-constexpr const char *weekday_names[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
-constexpr const char *meridiem_names[] = {"A.M.", "P.M."};
-
-inline std::string format_date(const date_format format, const int month, const int day, const int weekday)
-{
-	const int m = std::clamp(month, 1, 12);
-	const int d = std::clamp(day, 1, 31);
-	const char *month_name = month_names[m - 1];
-	const char *weekday_name = weekday_names[std::clamp(weekday, 0, 6)];
-
-	char text[10] = "";
-	switch (format) {
-	case date_format::month_day_weekday:
-		std::snprintf(text, sizeof text, "%d/%d %s", m, d, weekday_name);
-		break;
-	case date_format::day_month_weekday:
-		std::snprintf(text, sizeof text, "%d/%d %s", d, m, weekday_name);
-		break;
-	case date_format::month_name_day:
-		std::snprintf(text, sizeof text, "%s %d", month_name, d);
-		break;
-	case date_format::day_month_name:
-		std::snprintf(text, sizeof text, "%d %s", d, month_name);
-		break;
-	case date_format::none:
-		break;
-	}
-	return text;
-}
-
-inline std::string format_time(const int hour, const int minute, const bool twelve_hour)
-{
-	const int h = std::clamp(hour, 0, 23);
-	const int m = std::clamp(minute, 0, 59);
-	const int shown_hour = twelve_hour ? (h % 12 == 0 ? 12 : h % 12) : h;
-
-	char text[6] = "";
-	std::snprintf(text, sizeof text, "%d:%02d", shown_hour, m);
-	return text;
-}
-
-inline const char *format_meridiem(const int hour, const bool twelve_hour)
-{
-	if (!twelve_hour) {
-		return "";
-	}
-	return meridiem_names[std::clamp(hour, 0, 23) < 12 ? 0 : 1];
-}
 
 class prepared_clock {
 public:

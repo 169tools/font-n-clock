@@ -45,6 +45,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <memory>
 #include <string>
 
+namespace {
 constexpr double preview_size = 30;
 
 QPixmap render_preview(const QString &family, const QString &style, const date_format date_format,
@@ -86,6 +87,7 @@ QString pick_default_style(const QStringList &styles)
 	}
 	return styles.isEmpty() ? QString() : styles.first();
 }
+} // namespace
 
 bool select_font(std::string &face, std::string &style, const date_format format, const bool twelve_hour)
 {
