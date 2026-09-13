@@ -32,9 +32,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QImage>
 #include <QLabel>
 #include <QLatin1Char>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QObject>
-#include <QOverload>
 #include <QPixmap>
 #include <QStringLiteral>
 #include <QTimer>
@@ -43,6 +43,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <Qt>
 #include <QtCore/qcontainerfwd.h>
 #include <QtGlobal>
+#include <qoverload.h>
 
 #include <memory>
 #include <string>
@@ -102,12 +103,29 @@ bool select_font(std::string &face, std::string &style, const date_format format
 
 	layout->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.Font")), &dialog));
 
+	auto *search = new QLineEdit(&dialog);
+	search->setPlaceholderText(QString::fromUtf8(obs_module_text("ClockSource.SearchFont")));
+	search->setClearButtonEnabled(true);
+	layout->addWidget(search);
+
 	auto *families = new QListWidget(&dialog);
 	for (const std::string &family : available_font_families()) {
 		families->addItem(QString::fromStdString(family));
 	}
 	families->sortItems();
 	layout->addWidget(families, 1);
+
+	QObject::connect(search, &QLineEdit::textChanged, families, [families](const QString &query) {
+		QListWidgetItem *first_visible = nullptr;
+		for (int i = 0; i < families->count(); ++i) {
+			QListWidgetItem *item = families->item(i);
+			item->setHidden(!item->text().contains(query, Qt::CaseInsensitive));
+		}
+		QListWidgetItem *current = families->currentItem();
+		if ((!current || current->isHidden()) && first_visible) {
+			families->setCurrentItem(first_visible);
+		}
+	});
 
 	auto *lower = new QGridLayout;
 	layout->addLayout(lower);
