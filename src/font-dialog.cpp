@@ -118,11 +118,7 @@ bool select_font(std::string &face, std::string &style, const date_format format
 		QListWidgetItem *first_visible = nullptr;
 		for (int i = 0; i < families->count(); ++i) {
 			QListWidgetItem *item = families->item(i);
-			const bool visible = item->text().contains(query, Qt::CaseInsensitive);
-			item->setHidden(!visible);
-			if (visible && !first_visible) {
-				first_visible = item;
-			}
+			item->setHidden(!item->text().contains(query, Qt::CaseInsensitive));
 		}
 		QListWidgetItem *current = families->currentItem();
 		if ((!current || current->isHidden()) && first_visible) {
