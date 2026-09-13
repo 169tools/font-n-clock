@@ -75,7 +75,7 @@ struct clock_frame {
 };
 
 struct shadow_style {
-	static constexpr double opacity = 0.5;
+	static constexpr double opacity = 0.3;
 	double offset = 0;
 	double blur = 0;
 };
