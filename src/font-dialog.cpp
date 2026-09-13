@@ -50,7 +50,7 @@ constexpr double preview_size = 30;
 QPixmap render_preview(const QString &family, const QString &style, const date_format date_format,
 		       const bool twelve_hour)
 {
-	clock_style spec{.date_format = date_format, .twelve_hour = twelve_hour};
+	clock_style spec{.format = date_format, .twelve_hour = twelve_hour};
 	spec.font_face = family.toStdString();
 	spec.font_style = style.toStdString();
 	spec.size = preview_size;
