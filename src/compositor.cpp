@@ -72,7 +72,7 @@ rgba decode(const std::uint32_t abgr)
 
 std::uint8_t to_byte(const float value)
 {
-	return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
+	return static_cast<std::uint8_t>(std::clamp(value, 0.0f, 1.0f) * 255.0f + 0.5f);
 }
 
 void blend_over(float *base, const rgba &color, const float alpha)
