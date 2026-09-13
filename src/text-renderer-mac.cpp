@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "cf-ptr.hpp"
+#include "clock-format.hpp"
 #include "compositor.hpp"
 #include "layout.hpp"
 #include "text-renderer.hpp"
