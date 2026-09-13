@@ -35,6 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <memory>
 #include <string>
 
+namespace {
 namespace settings {
 constexpr const char *date_format_name = "date_format";
 constexpr const char *twelve_hour_name = "twelve_hour";
@@ -407,6 +408,7 @@ bool refresh_content(clock_source *context)
 	context->strings = {.date = date, .time = time, .meridiem = meridiem};
 	return true;
 }
+} // namespace
 
 void register_clock_source()
 {

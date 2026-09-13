@@ -39,7 +39,35 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 #include <vector>
 
+namespace {
 constexpr float layout_limit = 1 << 20;
+
+struct row_format;
+struct glyph_run;
+ComPtr<IDWriteFactory> make_factory();
+std::wstring to_wide(const std::string &value);
+std::string to_utf8(const std::wstring &value);
+std::wstring preferred_name(IDWriteLocalizedStrings *names);
+bool matches_face_name(IDWriteFont *font, const std::wstring &style);
+ComPtr<IDWriteFont> find_font(IDWriteFactory *factory, const std::string &face, const std::string &style);
+ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font, const std::string &face,
+				      const double point_size);
+class glyph_collector;
+class dw_measurer;
+
+struct row_format {
+	ComPtr<IDWriteTextFormat> format;
+	double tracking_em = 0;
+};
+
+struct glyph_run {
+	ComPtr<IDWriteFontFace> face;
+	float em_size = 0;
+	float baseline_x = 0;
+	std::vector<std::uint16_t> indices;
+	std::vector<float> advances;
+	std::vector<DWRITE_GLYPH_OFFSET> offsets;
+};
 
 ComPtr<IDWriteFactory> make_factory()
 {
@@ -179,20 +207,6 @@ ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font
 	format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 	return format;
 }
-
-struct row_format {
-	ComPtr<IDWriteTextFormat> format;
-	double tracking_em = 0;
-};
-
-struct glyph_run {
-	ComPtr<IDWriteFontFace> face;
-	float em_size = 0;
-	float baseline_x = 0;
-	std::vector<std::uint16_t> indices;
-	std::vector<float> advances;
-	std::vector<DWRITE_GLYPH_OFFSET> offsets;
-};
 
 class glyph_collector : public IDWriteTextRenderer {
 public:
@@ -515,6 +529,7 @@ private:
 		return true;
 	}
 };
+} // namespace
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {

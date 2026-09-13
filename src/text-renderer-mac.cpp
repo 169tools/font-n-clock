@@ -58,6 +58,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <utility>
 #include <vector>
 
+namespace {
+struct row_style;
+std::string to_utf8(CFStringRef value);
+CFPtr<CFStringRef> make_cfstring(const std::string &value);
+CFPtr<CTFontRef> make_font(const std::string &face, const std::string &style, const double point_size);
+CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row);
+ink_extents measure_line(CTLineRef line);
+void draw_centered(CGContextRef context, CTLineRef line, const double reference_width, const double baseline_y,
+		   const double colon_offset_px);
+class mac_clock;
+class ct_measurer;
+
 struct row_style {
 	CTFontRef font = nullptr;
 	double tracking_em = 0;
@@ -289,6 +301,7 @@ public:
 private:
 	row_style row;
 };
+} // namespace
 
 std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 {
