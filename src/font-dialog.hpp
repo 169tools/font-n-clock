@@ -18,7 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include "text-renderer.hpp"
+#include "clock-format.hpp"
 
 #include <string>
 

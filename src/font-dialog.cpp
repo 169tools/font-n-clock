@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-frontend-api.h>
 
+#include "clock-format.hpp"
 #include "obs-module.h"
 #include "text-renderer.hpp"
 
@@ -31,6 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QImage>
 #include <QLabel>
 #include <QLatin1Char>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QObject>
 #include <QPixmap>
@@ -100,12 +102,33 @@ bool select_font(std::string &face, std::string &style, const date_format format
 
 	layout->addWidget(new QLabel(QString::fromUtf8(obs_module_text("ClockSource.Font")), &dialog));
 
+	auto *search = new QLineEdit(&dialog);
+	search->setPlaceholderText(QString::fromUtf8(obs_module_text("ClockSource.SearchFont")));
+	search->setClearButtonEnabled(true);
+	layout->addWidget(search);
+
 	auto *families = new QListWidget(&dialog);
 	for (const std::string &family : available_font_families()) {
 		families->addItem(QString::fromStdString(family));
 	}
 	families->sortItems();
 	layout->addWidget(families, 1);
+
+	QObject::connect(search, &QLineEdit::textChanged, families, [families](const QString &query) {
+		QListWidgetItem *first_visible = nullptr;
+		for (int i = 0; i < families->count(); ++i) {
+			QListWidgetItem *item = families->item(i);
+			const bool visible = item->text().contains(query, Qt::CaseInsensitive);
+			item->setHidden(!visible);
+			if (visible && !first_visible) {
+				first_visible = item;
+			}
+		}
+		QListWidgetItem *current = families->currentItem();
+		if ((!current || current->isHidden()) && first_visible) {
+			families->setCurrentItem(first_visible);
+		}
+	});
 
 	auto *lower = new QGridLayout;
 	layout->addLayout(lower);
@@ -179,8 +202,8 @@ bool select_font(std::string &face, std::string &style, const date_format format
 	debounce->setSingleShot(true);
 	debounce->setInterval(100); // キーリピートなどでの連続更新を抑制する
 	QObject::connect(debounce, &QTimer::timeout, preview, refresh_preview);
-	QObject::connect(families, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
-	QObject::connect(styles, &QListWidget::currentTextChanged, debounce, qOverload<>(&QTimer::start));
+	QObject::connect(families, &QListWidget::currentTextChanged, debounce, [debounce] { debounce->start(); });
+	QObject::connect(styles, &QListWidget::currentTextChanged, debounce, [debounce] { debounce->start(); });
 	refresh_preview();
 
 	if (dialog.exec() != QDialog::Accepted) {
