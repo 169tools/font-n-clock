@@ -18,13 +18,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "compositor.hpp"
 
+#include <util/base.h>
+
 #include "layout.hpp"
+#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <ratio>
 #include <vector>
 
 namespace {
@@ -245,6 +250,9 @@ rendered_text composite_text(const std::vector<text_layer> &layers, const compos
 		}
 	}
 
+	using clock = std::chrono::steady_clock;
+	const auto started = clock::now();
+
 	std::vector<float> fill(size, 0.0f);
 	std::vector<float> ring(size, 0.0f);
 	for (const text_layer &layer : layers) {
@@ -261,6 +269,8 @@ rendered_text composite_text(const std::vector<text_layer> &layers, const compos
 		}
 	}
 
+	const auto outlined = clock::now();
+
 	const rgba fill_color = decode(style.color);
 	const rgba outline_color = decode(style.outline_color);
 	std::vector<float> pixels(size * 4, 0.0f);
@@ -269,6 +279,8 @@ rendered_text composite_text(const std::vector<text_layer> &layers, const compos
 		blend_over(pixel, outline_color, ring[i] * outline_color.a);
 		blend_over(pixel, fill_color, fill[i] * fill_color.a);
 	}
+
+	const auto blended = clock::now();
 
 	if (style.shadow) {
 		std::vector<float> shape(size);
@@ -283,6 +295,8 @@ rendered_text composite_text(const std::vector<text_layer> &layers, const compos
 		}
 	}
 
+	const auto shadowed = clock::now();
+
 	rendered_text result = {
 		.width = static_cast<std::uint32_t>(width),
 		.height = static_cast<std::uint32_t>(height),
@@ -291,5 +305,14 @@ rendered_text composite_text(const std::vector<text_layer> &layers, const compos
 	for (std::size_t i = 0; i < pixels.size(); ++i) {
 		result.pixels[i] = to_byte(pixels[i]);
 	}
+
+	const auto finished = clock::now();
+
+	const auto ms = [](const auto from, const auto to) {
+		return std::chrono::duration<double, std::milli>(to - from).count();
+	};
+	obs_log(LOG_INFO, "composite: outline %.2f ms, blend %.2f ms, shadow %.2f ms, to_byte %.2f ms",
+		ms(started, outlined), ms(outlined, blended), ms(blended, shadowed), ms(shadowed, finished));
+
 	return result;
 }
