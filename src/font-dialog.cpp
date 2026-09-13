@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-frontend-api.h>
 
+#include "clock-format.hpp"
 #include "obs-module.h"
 #include "text-renderer.hpp"
 
@@ -33,6 +34,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QLatin1Char>
 #include <QListWidget>
 #include <QObject>
+#include <QOverload>
 #include <QPixmap>
 #include <QStringLiteral>
 #include <QTimer>
