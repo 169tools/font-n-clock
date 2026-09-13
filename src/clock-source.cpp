@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-source.h>
 #include <obs.h>
 
+#include "clock-format.hpp"
 #include "font-dialog.hpp"
 #include "text-renderer.hpp"
 
