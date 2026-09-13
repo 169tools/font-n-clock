@@ -39,6 +39,8 @@ target_sources(
     src/plugin-main.cpp
     src/clock-source.cpp
     src/clock-source.hpp
+    src/compositor.cpp
+    src/compositor.hpp
     src/font-dialog.cpp
     src/font-dialog.hpp
     src/layout.cpp

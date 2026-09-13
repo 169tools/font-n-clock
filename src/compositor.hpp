@@ -18,8 +18,34 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include "clock-format.hpp"
+#include "layout.hpp"
+#include "text-renderer.hpp"
 
-#include <string>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <vector>
 
-bool select_font(std::string &face, std::string &style, const date_format format, const bool twelve_hour);
+struct text_coverage {
+	std::uint32_t width = 0;
+	std::uint32_t height = 0;
+	std::vector<float> pixels;
+
+	bool valid() const noexcept
+	{
+		return width > 0 && height > 0 && pixels.size() == static_cast<std::size_t>(width) * height;
+	}
+};
+
+struct text_layer {
+	text_coverage coverage;
+	double outline_width_px = 0;
+};
+
+struct composite_style {
+	std::uint32_t color = 0xffffffff;
+	std::uint32_t outline_color = 0xff8c857e;
+	std::optional<shadow_style> shadow;
+};
+
+rendered_text composite_text(const std::vector<text_layer> &layers, const composite_style &style);
