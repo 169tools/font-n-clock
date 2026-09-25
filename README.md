@@ -14,3 +14,7 @@ $ make index
 $ make build
 $ make link	# OBS を再起動で build 後の更新が反映されるようにする
 ```
+
+## コード署名ポリシー
+
+[CODE_SIGN|NG_POLICY.md](./CODE_SIGN|NG_POLICY.md)
