@@ -1,6 +1,7 @@
 # フォントな時計 / Font-n-Clock
 
 ローカルフォントを使用して時計素材を作成できる OBS プラグイン
+https://obsproject.com/forum/resources/2680
 
 ## 環境構築
 
