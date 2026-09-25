@@ -17,7 +17,7 @@ $ make link	# OBS を再起動で build 後の更新が反映されるように�
 
 ## コード署名ポリシー / Code signing policy
 
-For the Windows binary, Free code signing provided by [SignPath.io](https://signpath.io/), certificet by [SignPath Foundation](https://signpath.org/).
+For the Windows installer, Free code signing provided by [SignPath.io](https://signpath.io/), certificet by [SignPath Foundation](https://signpath.org/).
 
 This project is maintained by a single developer, mizznoff, who acts as the sole commiter, reviewer, and approver.
 
