@@ -17,6 +17,7 @@
 !CMakeUserPresets.json
 !LICENSE
 !README.md
+!CODE_SIGN|NG_POLICY.md
 !Makefile
 
 # Exclude lock files
