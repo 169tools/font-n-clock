@@ -292,13 +292,12 @@ jobs:
 
       - name: Create Installer 📥
         if: fromJSON(needs.check-event.outputs.package)
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
-        with:
-          path: cmake/windows/resources/installer-windows.iss
-          options: >-
-            /DMyAppVersion=${{ steps.setup.outputs.pluginVersion }}
-            /DSourceDir=${{ github.workspace }}\release\${{ needs.check-event.outputs.config }}\${{ steps.setup.outputs.pluginName }}
-            /DOutputDir=${{ github.workspace }}\release
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+          	"/DMyAppVersion=${{ steps.setup.outputs.pluginVersion }}" `
+            "/DSourceDir=${{ github.workspace }}\release\${{ needs.check-event.outputs.config }}\${{ steps.setup.outputs.pluginName }}" `
+            "/DOutputDir=${{ github.workspace }}\release" `
+            cmake\windows\resources/installer-windows.iss
 
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
