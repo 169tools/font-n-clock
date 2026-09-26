@@ -290,6 +290,16 @@ jobs:
           config: ${{ needs.check-event.outputs.config }}
           package: ${{ fromJSON(needs.check-event.outputs.package) }}
 
+      - name: Create Installer 📥
+        if: fromJSON(needs.check-event.outputs.package)
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: cmake/windows/resources/installer-windows.iss
+          options: >-
+            /DMyAppVersion=${{ steps.setup.outputs.pluginVersion }}
+            /DSourceDir=${{ github.workspace }}\release\${{ needs.check-event.outputs.config }}\${{ steps.setup.outputs.pluginName }}
+            /DOutputDir=${{ github.workspace }}\release
+
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
         with:
