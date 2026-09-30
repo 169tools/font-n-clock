@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "clock-format.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -48,7 +49,10 @@ struct clock_style {
 	double bottom_margin() const noexcept { return size * 0.4; }
 	double horizontal_margin() const noexcept { return size * 0.38; }
 	double outline_width_px() const noexcept { return (outline_width / 2.0) * size / default_size; }
-	double caption_outline_width_px() const noexcept { return outline_width_px() * 0.75; }
+	double caption_outline_width_px() const noexcept
+	{
+		return outline_width_px() * (0.95 - std::pow(static_cast<double>(outline_width) / 10, 0.5) * 0.2);
+	}
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 	double shadow_offset_px() const noexcept { return time_ink_height() * 0.02; }
 	double shadow_blur_px() const noexcept { return time_ink_height() * 0.1; }
