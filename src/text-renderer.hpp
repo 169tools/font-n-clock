@@ -28,6 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 struct clock_style {
 	static constexpr int default_size = 50;
+	static constexpr int max_outline_width = 10;
 
 	date_format format = date_format::month_day_weekday;
 	bool twelve_hour = false;
@@ -51,7 +52,8 @@ struct clock_style {
 	double outline_width_px() const noexcept { return (outline_width / 2.0) * size / default_size; }
 	double caption_outline_width_px() const noexcept
 	{
-		return outline_width_px() * (0.95 - std::pow(static_cast<double>(outline_width) / 10, 0.5) * 0.2);
+		const double normalized_outline_width = static_cast<double>(outline_width) / max_outline_width;
+		return outline_width_px() * (0.95 - std::pow(normalized_outline_width, 0.5) * 0.2);
 	}
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 	double shadow_offset_px() const noexcept { return time_ink_height() * 0.02; }

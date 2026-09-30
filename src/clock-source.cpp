@@ -228,7 +228,8 @@ obs_properties_t *clock_source_get_properties(void *data)
 		return true;
 	});
 	obs_properties_add_int_slider(appearance_props, settings::outline_width_name,
-				      obs_module_text("ClockSource.Outline.Width"), 1, 10, 1);
+				      obs_module_text("ClockSource.Outline.Width"), 1, clock_style::max_outline_width,
+				      1);
 	obs_properties_add_color(appearance_props, settings::outline_color_name,
 				 obs_module_text("ClockSource.Outline.Color"));
 
