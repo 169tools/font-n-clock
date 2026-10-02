@@ -26,6 +26,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 #include <vector>
 
+constexpr struct font_override {
+	const char *family;
+	const char *language;
+} font_overrides[] = {
+	{.family = "HakkouMincho", .language = "ja"},
+};
+
 struct clock_style {
 	static constexpr int default_size = 50;
 	static constexpr int max_outline_width = 10;
@@ -58,6 +65,16 @@ struct clock_style {
 	double colon_offset_px() const noexcept { return time_ink_height() * colon_offset_ratio; }
 	double shadow_offset_px() const noexcept { return time_ink_height() * 0.02; }
 	double shadow_blur_px() const noexcept { return time_ink_height() * 0.1; }
+
+	const char *text_language() const noexcept
+	{
+		for (const font_override &entry : font_overrides) {
+			if (font_face == entry.family) {
+				return entry.language;
+			}
+		}
+		return nullptr;
+	}
 };
 
 struct rendered_text {

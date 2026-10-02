@@ -74,6 +74,7 @@ class ct_measurer;
 struct row_style {
 	CTFontRef font = nullptr;
 	double tracking_em = 0;
+	CFStringRef language = nullptr;
 };
 
 std::string to_utf8(CFStringRef value)
@@ -137,12 +138,15 @@ CFPtr<CTLineRef> make_line(const std::string &text, const row_style &row)
 		return nullptr;
 	}
 
-	const void *keys[] = {kCTFontAttributeName, kCTTrackingAttributeName, kCTForegroundColorAttributeName};
-	const void *values[] = {row.font, tracking.get()};
-	CFPtr<CFDictionaryRef> attributes(CFDictionaryCreate(nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
-							     &kCFTypeDictionaryValueCallBacks));
+	CFPtr<CFMutableDictionaryRef> attributes(CFDictionaryCreateMutable(nullptr, 3, &kCFTypeDictionaryKeyCallBacks,
+									   &kCFTypeDictionaryValueCallBacks));
 	if (!attributes) {
 		return nullptr;
+	}
+	CFDictionarySetValue(attributes.get(), kCTFontAttributeName, row.font);
+	CFDictionarySetValue(attributes.get(), kCTTrackingAttributeName, tracking.get());
+	if (row.language) {
+		CFDictionarySetValue(attributes.get(), kCTLanguageAttributeName, row.language);
 	}
 
 	CFPtr<CFAttributedStringRef> attributed(CFAttributedStringCreate(nullptr, string.get(), attributes.get()));
@@ -215,6 +219,7 @@ public:
 	CFPtr<CTFontRef> time_font;
 	double caption_tracking_em = 0;
 	double time_tracking_em = 0;
+	CFPtr<CFStringRef> language;
 	double outline_width_px = 0;
 	double caption_outline_width_px = 0;
 	clock_frame frame;
@@ -222,8 +227,16 @@ public:
 
 	rendered_text render(const clock_strings &clock_strings) const override
 	{
-		const row_style caption_row = {.font = caption_font.get(), .tracking_em = caption_tracking_em};
-		const row_style time_row = {.font = time_font.get(), .tracking_em = time_tracking_em};
+		const row_style caption_row = {
+			.font = caption_font.get(),
+			.tracking_em = caption_tracking_em,
+			.language = language.get(),
+		};
+		const row_style time_row = {
+			.font = time_font.get(),
+			.tracking_em = time_tracking_em,
+			.language = language.get(),
+		};
 
 		CFPtr<CTLineRef> date_line;
 		if (!clock_strings.date.empty()) {
@@ -310,8 +323,13 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	if (!probe) {
 		return nullptr;
 	}
+	CFPtr<CFStringRef> language;
+	if (const char *tag = style.text_language()) {
+		language = make_cfstring(tag);
+	}
 
-	const std::array<ink_extents, 10> probe_digits = digit_extents(ct_measurer({.font = probe.get()}));
+	const row_style row = {.font = probe.get(), .language = language.get()};
+	const std::array<ink_extents, 10> probe_digits = digit_extents(ct_measurer(row));
 
 	const double caption_point_size = solve_point_size(probe_digits, style.caption_ink_height());
 	const double time_point_size = solve_point_size(probe_digits, style.time_ink_height());
@@ -325,8 +343,16 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
-	const ct_measurer caption_measurer({.font = caption_font.get(), .tracking_em = style.caption_tracking_em()});
-	const ct_measurer time_measurer({.font = time_font.get(), .tracking_em = style.tracking_em});
+	const ct_measurer caption_measurer({
+		.font = caption_font.get(),
+		.tracking_em = style.caption_tracking_em(),
+		.language = language.get(),
+	});
+	const ct_measurer time_measurer({
+		.font = time_font.get(),
+		.tracking_em = style.tracking_em,
+		.language = language.get(),
+	});
 	const row_extents time_extents = time_reference_extents(time_measurer, style.twelve_hour);
 
 	if (time_extents.width <= 0) {
@@ -354,6 +380,7 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	clock->time_font = std::move(time_font);
 	clock->caption_tracking_em = style.caption_tracking_em();
 	clock->time_tracking_em = style.tracking_em;
+	clock->language = std::move(language);
 	clock->outline_width_px = style.outline_width_px();
 	clock->caption_outline_width_px = style.caption_outline_width_px();
 	clock->frame = solve_frame(style, date_extents, time_extents, meridiem_extents);
@@ -436,8 +463,12 @@ double suggest_colon_offset_ratio(const clock_style &style)
 	if (!probe) {
 		return 0;
 	}
+	CFPtr<CFStringRef> language;
+	if (const char *tag = style.text_language()) {
+		language = make_cfstring(tag);
+	}
 
-	const ct_measurer probe_measurer({.font = probe.get()});
+	const ct_measurer probe_measurer({.font = probe.get(), .language = language.get()});
 	const ink_span digits = digit_envelope(digit_extents(probe_measurer));
 	if (digits.height() <= 0) {
 		return 0;
