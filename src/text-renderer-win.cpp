@@ -51,7 +51,7 @@ std::wstring preferred_name(IDWriteLocalizedStrings *names);
 bool matches_face_name(IDWriteFont *font, const std::wstring &style);
 ComPtr<IDWriteFont> find_font(IDWriteFactory *factory, const std::string &face, const std::string &style);
 ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font, const std::string &face,
-				      const double point_size);
+				      const double point_size, const char *language);
 class glyph_collector;
 class dw_measurer;
 
@@ -197,11 +197,13 @@ ComPtr<IDWriteFont> find_font(IDWriteFactory *factory, const std::string &face, 
 }
 
 ComPtr<IDWriteTextFormat> make_format(IDWriteFactory *factory, IDWriteFont *font, const std::string &face,
-				      const double point_size)
+				      const double point_size, const char *language)
 {
+	const std::wstring locale = language ? to_wide(language) : L"en-us";
 	ComPtr<IDWriteTextFormat> format;
 	if (FAILED(factory->CreateTextFormat(to_wide(face).c_str(), nullptr, font->GetWeight(), font->GetStyle(),
-					     font->GetStretch(), static_cast<FLOAT>(point_size), L"en-us", &format))) {
+					     font->GetStretch(), static_cast<FLOAT>(point_size), locale.c_str(),
+					     &format))) {
 		return nullptr;
 	}
 	format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -543,8 +545,10 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 		return nullptr;
 	}
 
+	const char *language = style.text_language();
+
 	ComPtr<IDWriteTextFormat> probe_format =
-		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size);
+		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size, language);
 	if (!probe_format) {
 		return nullptr;
 	}
@@ -559,9 +563,9 @@ std::unique_ptr<prepared_clock> prepare_clock(const clock_style &style)
 	}
 
 	ComPtr<IDWriteTextFormat> caption_format =
-		make_format(factory.Get(), font.Get(), style.font_face, caption_point_size);
+		make_format(factory.Get(), font.Get(), style.font_face, caption_point_size, language);
 	ComPtr<IDWriteTextFormat> time_format =
-		make_format(factory.Get(), font.Get(), style.font_face, time_point_size);
+		make_format(factory.Get(), font.Get(), style.font_face, time_point_size, language);
 	if (!caption_format || !time_format) {
 		return nullptr;
 	}
@@ -697,7 +701,7 @@ double suggest_colon_offset_ratio(const clock_style &style)
 		return 0;
 	}
 	ComPtr<IDWriteTextFormat> probe_format =
-		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size);
+		make_format(factory.Get(), font.Get(), style.font_face, reference_point_size, style.text_language());
 	if (!probe_format) {
 		return 0;
 	}
