@@ -463,8 +463,12 @@ double suggest_colon_offset_ratio(const clock_style &style)
 	if (!probe) {
 		return 0;
 	}
+	CFPtr<CFStringRef> language;
+	if (const char *tag = style.text_language()) {
+		language = make_cfstring(tag);
+	}
 
-	const ct_measurer probe_measurer({.font = probe.get()});
+	const ct_measurer probe_measurer({.font = probe.get(), .language = language.get()});
 	const ink_span digits = digit_envelope(digit_extents(probe_measurer));
 	if (digits.height() <= 0) {
 		return 0;
