@@ -35,6 +35,7 @@ constexpr struct font_override {
 
 struct clock_style {
 	static constexpr int default_size = 50;
+	static constexpr double default_row_spacing_ratio = 0.24;
 	static constexpr int max_outline_width = 10;
 
 	date_format format = date_format::month_day_weekday;
@@ -42,8 +43,9 @@ struct clock_style {
 	std::string font_face;
 	std::string font_style;
 	double size = default_size;
-	double colon_offset_ratio = 0;
+	double row_spacing_ratio = default_row_spacing_ratio;
 	double tracking_em = 0;
+	double colon_offset_ratio = 0;
 	std::uint32_t color = 0xffffffff;
 	std::uint32_t outline_width = 0;
 	std::uint32_t outline_color = 0xff8c857e;
@@ -52,7 +54,7 @@ struct clock_style {
 	double caption_ink_height() const noexcept { return size * 0.4; }
 	double time_ink_height() const noexcept { return size; }
 	double caption_tracking_em() const noexcept { return tracking_em * 0.8; }
-	double row_spacing() const noexcept { return size * 0.24; }
+	double row_spacing() const noexcept { return size * row_spacing_ratio; }
 	double top_margin() const noexcept { return size * 0.36; }
 	double bottom_margin() const noexcept { return size * 0.4; }
 	double horizontal_margin() const noexcept { return size * 0.38; }
