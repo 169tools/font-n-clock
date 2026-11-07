@@ -32,6 +32,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-support.h"
 #include "text-renderer.hpp"
 
+#include <QByteArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -96,6 +100,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data);
 int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style);
 bool load_preset(obs_properties_t *, obs_property_t *, void *data);
 bool save_preset(obs_properties_t *, obs_property_t *, void *data);
+QJsonObject to_json_object(obs_data_t *data);
 void erase_all_presets();
 static void clock_source_rebuild_texture(clock_source *context);
 bool refresh_content(clock_source *context);
@@ -422,6 +427,7 @@ bool save_preset(obs_properties_t *, obs_property_t *, void *data)
 	OBSDataAutoRelease settings = obs_source_get_settings(context->source);
 	OBSDataAutoRelease snapshot = obs_data_create_from_json(obs_data_get_json_with_defaults(settings));
 	obs_data_erase(snapshot, settings::layout_details_enabled_name);
+	obs_data_erase(snapshot, "undo_uuid"); // 重複判定が壊れないように、OBS側で設定されたパラメータを削除する
 
 	BPtr<char> directory = obs_module_config_path("");
 	BPtr<char> path = obs_module_config_path("presets.json");
@@ -437,7 +443,16 @@ bool save_preset(obs_properties_t *, obs_property_t *, void *data)
 	if (!presets) {
 		presets = obs_data_array_create();
 	}
-	obs_data_array_push_back(presets, snapshot);
+	const QJsonObject target = to_json_object(snapshot);
+	const size_t count = obs_data_array_count(presets);
+	for (size_t i = 0; i < count; i++) {
+		OBSDataAutoRelease preset = obs_data_array_item(presets, i);
+		if (to_json_object(preset) == target) {
+			obs_data_array_erase(presets, i);
+			break;
+		}
+	}
+	obs_data_array_insert(presets, 0, snapshot);
 	obs_data_set_array(root, "presets", presets);
 	if (obs_data_save_json_pretty_safe(root, path, "tmp", "bak")) {
 		// TODO: 成功ダイアログの表示
@@ -446,6 +461,11 @@ bool save_preset(obs_properties_t *, obs_property_t *, void *data)
 		obs_log(LOG_WARNING, "Failed to save preset");
 	}
 	return false;
+}
+
+QJsonObject to_json_object(obs_data_t *data)
+{
+	return QJsonDocument::fromJson(QByteArray(obs_data_get_json(data))).object();
 }
 
 void erase_all_presets()
