@@ -41,7 +41,6 @@ namespace settings {
 constexpr const char *date_format_name = "date_format";
 constexpr const char *twelve_hour_name = "twelve_hour";
 constexpr const char *font_display_name = "font_display";
-constexpr const char *select_font_name = "select_font";
 constexpr const char *font_face_name = "font_face";
 constexpr const char *font_style_name = "font_style";
 constexpr const char *size_name = "size";
@@ -89,6 +88,8 @@ void clock_source_render(void *data, gs_effect *);
 std::string font_display_text(const std::string &font_face, const std::string &font_style);
 bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data);
 int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style);
+bool clock_source_load_preset(obs_properties_t *, obs_property_t *, void *data);
+bool clock_source_save(obs_properties_t *, obs_property_t *, void *data);
 static void clock_source_rebuild_texture(clock_source *context);
 bool refresh_content(clock_source *context);
 
@@ -180,6 +181,11 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
+	obs_properties_add_button2(props, "load_preset_button", obs_module_text("ClockSource.LoadPreset"),
+				   clock_source_load_preset, data);
+	obs_properties_add_button2(props, "save_preset_button", obs_module_text("ClockSource.SavePreset"),
+				   clock_source_save, data);
+
 	obs_properties_t *format_props = obs_properties_create();
 
 	obs_property_t *date_list = obs_properties_add_list(format_props, settings::date_format_name,
@@ -207,7 +213,7 @@ obs_properties_t *clock_source_get_properties(void *data)
 	obs_properties_t *layout_props = obs_properties_create();
 	obs_properties_add_text(layout_props, settings::font_display_name, obs_module_text("ClockSource.Font"),
 				OBS_TEXT_INFO);
-	obs_properties_add_button2(layout_props, settings::select_font_name, obs_module_text("ClockSource.SelectFont"),
+	obs_properties_add_button2(layout_props, "select_font_button", obs_module_text("ClockSource.SelectFont"),
 				   clock_source_select_font, data);
 	obs_properties_add_int_slider(layout_props, settings::size_name, obs_module_text("ClockSource.Size"), 20, 200,
 				      1);
@@ -374,6 +380,18 @@ int suggested_colon_offset_percent(const std::string &font_face, const std::stri
 	const double suggested_colon_offset_ratio = suggest_colon_offset_ratio(clock_style);
 	return std::clamp(static_cast<int>(std::lround(suggested_colon_offset_ratio * 100)),
 			  settings::colon_offset_percent_min, settings::colon_offset_percent_max);
+}
+
+bool clock_source_load_preset(obs_properties_t *, obs_property_t *, void *)
+{
+	// TBD
+	return true;
+}
+
+bool clock_source_save(obs_properties_t *, obs_property_t *, void *)
+{
+	// TBD
+	return true;
 }
 
 static void clock_source_rebuild_texture(clock_source *context)
