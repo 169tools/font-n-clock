@@ -23,9 +23,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-properties.h>
 #include <obs-source.h>
 #include <obs.h>
+#include <obs.hpp>
+#include <util/platform.h>
+#include <util/util.hpp>
 
 #include "clock-format.hpp"
 #include "font-dialog.hpp"
+#include "plugin-support.h"
 #include "text-renderer.hpp"
 
 #include <algorithm>
@@ -33,8 +37,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
+#include <libobs/util/base.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 namespace settings {
@@ -45,7 +51,7 @@ constexpr const char *font_face_name = "font_face";
 constexpr const char *font_style_name = "font_style";
 constexpr const char *size_name = "size";
 constexpr const char *row_spacing_percent_name = "row_spacing";
-constexpr const char *layout_details_name = "layout_details";
+constexpr const char *layout_details_enabled_name = "layout_details";
 constexpr const char *tracking_percent_name = "tracking_percent";
 constexpr const char *colon_offset_percent_name = "colon_offset_percent";
 constexpr const char *color_name = "color";
@@ -88,8 +94,8 @@ void clock_source_render(void *data, gs_effect *);
 std::string font_display_text(const std::string &font_face, const std::string &font_style);
 bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data);
 int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style);
-bool clock_source_load_preset(obs_properties_t *, obs_property_t *, void *data);
-bool clock_source_save(obs_properties_t *, obs_property_t *, void *data);
+bool load_preset(obs_properties_t *, obs_property_t *, void *data);
+bool save_preset(obs_properties_t *, obs_property_t *, void *data);
 static void clock_source_rebuild_texture(clock_source *context);
 bool refresh_content(clock_source *context);
 
@@ -181,10 +187,10 @@ obs_properties_t *clock_source_get_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 
-	obs_properties_add_button2(props, "load_preset_button", obs_module_text("ClockSource.LoadPreset"),
-				   clock_source_load_preset, data);
-	obs_properties_add_button2(props, "save_preset_button", obs_module_text("ClockSource.SavePreset"),
-				   clock_source_save, data);
+	obs_properties_add_button2(props, "load_preset_button", obs_module_text("ClockSource.LoadPreset"), load_preset,
+				   data);
+	obs_properties_add_button2(props, "save_preset_button", obs_module_text("ClockSource.SavePreset"), save_preset,
+				   data);
 
 	obs_properties_t *format_props = obs_properties_create();
 
@@ -220,11 +226,11 @@ obs_properties_t *clock_source_get_properties(void *data)
 	obs_properties_add_int_slider(layout_props, settings::row_spacing_percent_name,
 				      obs_module_text("ClockSource.RowSpacing"), 0, 30, 1);
 
-	obs_property_t *layout_details_prop = obs_properties_add_bool(layout_props, settings::layout_details_name,
-								      obs_module_text("ClockSource.LayoutDetails"));
+	obs_property_t *layout_details_prop = obs_properties_add_bool(
+		layout_props, settings::layout_details_enabled_name, obs_module_text("ClockSource.LayoutDetails"));
 	obs_property_set_modified_callback(layout_details_prop, [](obs_properties_t *props, obs_property_t *,
 								   obs_data_t *settings) {
-		const bool layout_details_enabled = obs_data_get_bool(settings, settings::layout_details_name);
+		const bool layout_details_enabled = obs_data_get_bool(settings, settings::layout_details_enabled_name);
 		obs_property_set_visible(obs_properties_get(props, settings::tracking_percent_name),
 					 layout_details_enabled);
 		obs_property_set_visible(obs_properties_get(props, settings::colon_offset_percent_name),
@@ -382,16 +388,62 @@ int suggested_colon_offset_percent(const std::string &font_face, const std::stri
 			  settings::colon_offset_percent_min, settings::colon_offset_percent_max);
 }
 
-bool clock_source_load_preset(obs_properties_t *, obs_property_t *, void *)
+bool load_preset(obs_properties_t *, obs_property_t *, void *)
 {
-	// TBD
-	return true;
+	// auto *context = static_cast<clock_source *>(data);
+
+	BPtr<char> path = obs_module_config_path("presets.json");
+	OBSDataAutoRelease root = obs_data_create_from_json_file_safe(path, "bak");
+	if (!root) {
+		return false;
+	}
+	OBSDataArrayAutoRelease presets = obs_data_get_array(root, "presets");
+	if (!presets) {
+		return false;
+	}
+	std::vector<OBSData> result;
+	const size_t count = obs_data_array_count(presets);
+	for (size_t i = 0; i < count; i++) {
+		OBSDataAutoRelease preset = obs_data_array_item(presets, i);
+		result.emplace_back(preset.Get());
+	}
+	for (const OBSData &preset : result) {
+		obs_log(LOG_INFO, "%s", obs_data_get_json(preset));
+	}
+	return false;
 }
 
-bool clock_source_save(obs_properties_t *, obs_property_t *, void *)
+bool save_preset(obs_properties_t *, obs_property_t *, void *data)
 {
-	// TBD
-	return true;
+	auto *context = static_cast<clock_source *>(data);
+
+	OBSDataAutoRelease settings = obs_source_get_settings(context->source);
+	OBSDataAutoRelease snapshot = obs_data_create_from_json(obs_data_get_json_with_defaults(settings));
+	obs_data_erase(snapshot, settings::layout_details_enabled_name);
+
+	BPtr<char> directory = obs_module_config_path("");
+	BPtr<char> path = obs_module_config_path("presets.json");
+	if (os_mkdirs(directory) == MKDIR_ERROR) {
+		return false;
+	}
+
+	OBSDataAutoRelease root = obs_data_create_from_json_file_safe(path, "bak");
+	if (!root) {
+		root = obs_data_create();
+	}
+	OBSDataArrayAutoRelease presets = obs_data_get_array(root, "presets");
+	if (!presets) {
+		presets = obs_data_array_create();
+	}
+	obs_data_array_push_back(presets, snapshot);
+	obs_data_set_array(root, "presets", presets);
+	if (obs_data_save_json_pretty_safe(root, path, "tmp", "bak")) {
+		// TODO: 成功ダイアログの表示
+	} else {
+		// TODO: 失敗ダイアログの表示
+		obs_log(LOG_WARNING, "Failed to save preset");
+	}
+	return false;
 }
 
 static void clock_source_rebuild_texture(clock_source *context)
