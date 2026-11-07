@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-source.h>
 #include <obs.h>
 #include <obs.hpp>
+#include <util/base.h>
 #include <util/platform.h>
 #include <util/util.hpp>
 
@@ -41,7 +42,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
-#include <libobs/util/base.h>
 #include <memory>
 #include <string>
 #include <vector>
