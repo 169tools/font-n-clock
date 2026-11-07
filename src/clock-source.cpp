@@ -96,6 +96,7 @@ bool clock_source_select_font(obs_properties_t *, obs_property_t *, void *data);
 int suggested_colon_offset_percent(const std::string &font_face, const std::string &font_style);
 bool load_preset(obs_properties_t *, obs_property_t *, void *data);
 bool save_preset(obs_properties_t *, obs_property_t *, void *data);
+void erase_all_presets();
 static void clock_source_rebuild_texture(clock_source *context);
 bool refresh_content(clock_source *context);
 
@@ -137,6 +138,7 @@ const char *clock_source_get_name(void *)
 
 void *clock_source_create(obs_data_t *settings, obs_source_t *source)
 {
+	erase_all_presets(); // TODO: このメソッドの削除
 	clock_source *context = new clock_source();
 	context->source = source;
 	clock_source_update(context, settings);
@@ -444,6 +446,12 @@ bool save_preset(obs_properties_t *, obs_property_t *, void *data)
 		obs_log(LOG_WARNING, "Failed to save preset");
 	}
 	return false;
+}
+
+void erase_all_presets()
+{
+	os_unlink(obs_module_config_path("presets.json"));
+	os_unlink(obs_module_config_path("presets.json.bak"));
 }
 
 static void clock_source_rebuild_texture(clock_source *context)
